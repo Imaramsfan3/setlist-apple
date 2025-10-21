@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to create Apple Music playlists from setlist.fm URLs
+Supports macOS (AppleScript), Windows (COM/iTunes), and M3U export
 """
 
 import sys
@@ -11,6 +12,8 @@ import argparse
 from urllib.parse import urlparse
 import os
 from typing import List, Dict, Optional
+from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 class SetlistFMClient:
@@ -68,8 +71,22 @@ class SetlistFMClient:
         return songs, artist_name, event_date
 
 
-class AppleMusicController:
-    """Controller for interacting with Apple Music via AppleScript"""
+class MusicController(ABC):
+    """Abstract base class for music playlist controllers"""
+
+    @abstractmethod
+    def create_playlist(self, name: str) -> None:
+        """Create a new playlist"""
+        pass
+
+    @abstractmethod
+    def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
+        """Search for and add a song to the playlist"""
+        pass
+
+
+class AppleMusicMacController(MusicController):
+    """Controller for Apple Music on macOS via AppleScript"""
 
     @staticmethod
     def run_applescript(script: str) -> str:
@@ -140,9 +157,170 @@ class AppleMusicController:
             return False
 
 
+class AppleMusicWindowsController(MusicController):
+    """Controller for Apple Music/iTunes on Windows via COM"""
+
+    def __init__(self):
+        try:
+            import win32com.client
+            self.win32com = win32com.client
+            self.itunes = None
+        except ImportError:
+            raise ImportError(
+                "pywin32 package required for Windows support.\n"
+                "Install it with: pip install pywin32"
+            )
+
+    def _get_itunes(self):
+        """Get iTunes/Apple Music COM object"""
+        if self.itunes is None:
+            try:
+                # Try Apple Music first, then iTunes
+                try:
+                    self.itunes = self.win32com.Dispatch("iTunes.Application")
+                except:
+                    self.itunes = self.win32com.Dispatch("AppleMusic.Application")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not connect to Apple Music/iTunes: {e}\n"
+                    "Make sure Apple Music or iTunes is installed."
+                )
+        return self.itunes
+
+    def create_playlist(self, name: str) -> None:
+        """Create a new playlist in Apple Music/iTunes"""
+        app = self._get_itunes()
+
+        # Check if playlist exists
+        sources = app.Sources
+        for source in sources:
+            if source.Kind == 1:  # Library
+                playlists = source.Playlists
+                for playlist in playlists:
+                    if playlist.Name == name:
+                        print(f"Playlist already exists: {name}")
+                        return
+
+        # Create new playlist
+        app.CreatePlaylist(name)
+        print(f"Created playlist: {name}")
+
+    def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
+        """
+        Search for a song and add it to the playlist
+        Returns True if successful, False otherwise
+        """
+        try:
+            app = self._get_itunes()
+
+            # Find the playlist
+            target_playlist = None
+            sources = app.Sources
+            for source in sources:
+                if source.Kind == 1:  # Library
+                    playlists = source.Playlists
+                    for playlist in playlists:
+                        if playlist.Name == playlist_name:
+                            target_playlist = playlist
+                            break
+                if target_playlist:
+                    break
+
+            if not target_playlist:
+                print(f"  ✗ Playlist not found: {playlist_name}")
+                return False
+
+            # Search for the track
+            search_query = f"{song_name} {artist_name}"
+            library_playlist = app.LibraryPlaylist
+            search_results = library_playlist.Search(search_query, 0)  # 0 = search all fields
+
+            if search_results and search_results.Count > 0:
+                track = search_results.Item(1)  # Get first result (COM uses 1-based indexing)
+                track.AddToPlaylist(target_playlist)
+                print(f"  ✓ Added: {song_name} - {artist_name}")
+                return True
+            else:
+                print(f"  ✗ Not found: {song_name} - {artist_name}")
+                return False
+
+        except Exception as e:
+            print(f"  ✗ Error adding {song_name}: {str(e)}")
+            return False
+
+
+class M3UExporter:
+    """Export playlist as M3U file for manual import"""
+
+    @staticmethod
+    def export_playlist(playlist_name: str, songs: List[Dict[str, str]], output_path: str = None) -> str:
+        """
+        Export songs to M3U playlist file
+        Returns the path to the created file
+        """
+        if output_path is None:
+            # Create safe filename
+            safe_name = "".join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            output_path = f"{safe_name}.m3u"
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write("#EXTM3U\n")
+            for song in songs:
+                # M3U format: #EXTINF:duration,artist - title
+                # Duration is unknown, so use -1
+                f.write(f"#EXTINF:-1,{song['artist']} - {song['name']}\n")
+                # We don't have actual file paths, so just write the search query
+                # This serves as a reference list
+                f.write(f"# Search: {song['name']} by {song['artist']}\n")
+
+        return output_path
+
+
+def get_music_controller(export_only: bool = False) -> Optional[MusicController]:
+    """
+    Get the appropriate music controller for the current platform
+    Returns None if export_only is True
+    """
+    if export_only:
+        return None
+
+    if sys.platform == "darwin":
+        # macOS - use AppleScript
+        return AppleMusicMacController()
+    elif sys.platform == "win32":
+        # Windows - use COM
+        try:
+            return AppleMusicWindowsController()
+        except ImportError as e:
+            print(f"Warning: {e}")
+            print("Falling back to M3U export mode.")
+            return None
+        except RuntimeError as e:
+            print(f"Warning: {e}")
+            print("Falling back to M3U export mode.")
+            return None
+    else:
+        # Unsupported platform
+        print(f"Warning: Platform '{sys.platform}' not supported for direct playlist creation.")
+        print("Falling back to M3U export mode.")
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Create an Apple Music playlist from a setlist.fm URL"
+        description="Create an Apple Music playlist from a setlist.fm URL",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
+  %(prog)s "URL" --playlist-name "My Custom Playlist"
+  %(prog)s "URL" --export-only --output myplaylist.m3u
+
+Platform Support:
+  macOS:   Uses AppleScript to control Apple Music
+  Windows: Uses COM interface (requires iTunes or Apple Music for Windows)
+  Other:   Exports M3U file for manual import
+        """
     )
     parser.add_argument(
         "url",
@@ -157,6 +335,15 @@ def main():
         "--playlist-name",
         help="Custom playlist name (default: 'Artist - Venue - Date')"
     )
+    parser.add_argument(
+        "--export-only",
+        action="store_true",
+        help="Only export M3U file, don't create playlist in Apple Music"
+    )
+    parser.add_argument(
+        "--output",
+        help="Output path for M3U file (only used with --export-only)"
+    )
 
     args = parser.parse_args()
 
@@ -166,16 +353,10 @@ def main():
         print("\nGet your API key at: https://www.setlist.fm/settings/api")
         sys.exit(1)
 
-    # Check if running on macOS
-    if sys.platform != "darwin":
-        print("Error: This script requires macOS to control Apple Music")
-        sys.exit(1)
-
     print(f"Fetching setlist from: {args.url}\n")
 
-    # Initialize clients
+    # Initialize setlist client
     setlist_client = SetlistFMClient(args.api_key)
-    music_controller = AppleMusicController()
 
     # Extract setlist ID from URL
     setlist_id = setlist_client.extract_setlist_id(args.url)
@@ -213,13 +394,35 @@ def main():
         venue = setlist_data.get("venue", {}).get("name", "Unknown Venue")
         playlist_name = f"{artist_name} - {venue} - {event_date}"
 
+    # Get music controller
+    music_controller = get_music_controller(export_only=args.export_only)
+
+    if music_controller is None:
+        # Export to M3U file
+        print(f"Exporting playlist to M3U file: {playlist_name}\n")
+        output_path = M3UExporter.export_playlist(playlist_name, songs, args.output)
+        print(f"\n{'='*50}")
+        print(f"M3U playlist exported successfully!")
+        print(f"{'='*50}")
+        print(f"File: {output_path}")
+        print(f"Songs: {len(songs)}")
+        print(f"\nTo import into Apple Music:")
+        print(f"1. Open Apple Music")
+        print(f"2. Go to File > Library > Import Playlist")
+        print(f"3. Select the M3U file: {output_path}")
+        print(f"\nNote: You'll need to manually search and add songs in Apple Music")
+        return
+
+    # Create playlist directly
     print(f"Creating playlist: {playlist_name}\n")
 
-    # Create playlist
     try:
         music_controller.create_playlist(playlist_name)
     except Exception as e:
         print(f"Error creating playlist: {e}")
+        print("\nTrying M3U export as fallback...")
+        output_path = M3UExporter.export_playlist(playlist_name, songs, args.output)
+        print(f"M3U file created: {output_path}")
         sys.exit(1)
 
     # Add songs to playlist
