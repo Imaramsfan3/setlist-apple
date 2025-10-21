@@ -165,6 +165,7 @@ class AppleMusicWindowsController(MusicController):
             import win32com.client
             self.win32com = win32com.client
             self.itunes = None
+            self.app_name = None
         except ImportError:
             raise ImportError(
                 "pywin32 package required for Windows support.\n"
@@ -174,19 +175,37 @@ class AppleMusicWindowsController(MusicController):
     def _get_itunes(self):
         """Get Apple Music/iTunes COM object"""
         if self.itunes is None:
-            try:
-                # Try Apple Music first, then iTunes as fallback
+            # List of COM identifiers to try, in order of preference
+            com_identifiers = [
+                ("AppleMusic.Application", "Apple Music"),
+                ("iTunes.Application", "iTunes"),
+            ]
+
+            last_error = None
+            for com_id, app_name in com_identifiers:
                 try:
-                    self.itunes = self.win32com.Dispatch("AppleMusic.Application")
-                    print("Connected to Apple Music")
-                except:
-                    self.itunes = self.win32com.Dispatch("iTunes.Application")
-                    print("Connected to iTunes")
-            except Exception as e:
-                raise RuntimeError(
-                    f"Could not connect to Apple Music/iTunes: {e}\n"
-                    "Make sure Apple Music or iTunes is installed."
-                )
+                    self.itunes = self.win32com.Dispatch(com_id)
+                    self.app_name = app_name
+                    print(f"✓ Connected to {app_name}")
+                    return self.itunes
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            # If we get here, none of the COM objects worked
+            error_msg = (
+                f"Could not connect to Apple Music or iTunes.\n\n"
+                f"Error details: {last_error}\n\n"
+                f"Troubleshooting steps:\n"
+                f"1. Make sure Apple Music or iTunes is installed\n"
+                f"   Download from: https://www.apple.com/apple-music/ or https://www.apple.com/itunes/\n"
+                f"2. Launch the application at least once before running this script\n"
+                f"3. Restart your computer after installing\n"
+                f"4. Try running this script as Administrator\n\n"
+                f"Alternative: Use --export-only flag to create an M3U playlist file instead"
+            )
+            raise RuntimeError(error_msg)
+
         return self.itunes
 
     def create_playlist(self, name: str) -> None:
@@ -421,11 +440,22 @@ Platform Support:
     try:
         music_controller.create_playlist(playlist_name)
     except Exception as e:
-        print(f"Error creating playlist: {e}")
-        print("\nTrying M3U export as fallback...")
+        print(f"{e}")
+        print("\n" + "="*50)
+        print("Switching to M3U export mode...")
+        print("="*50 + "\n")
         output_path = M3UExporter.export_playlist(playlist_name, songs, args.output)
-        print(f"M3U file created: {output_path}")
-        sys.exit(1)
+        print(f"\n{'='*50}")
+        print(f"M3U playlist exported successfully!")
+        print(f"{'='*50}")
+        print(f"File: {output_path}")
+        print(f"Songs: {len(songs)}")
+        print(f"\nTo import into Apple Music or iTunes:")
+        print(f"1. Open Apple Music or iTunes")
+        print(f"2. Go to File > Library > Import Playlist")
+        print(f"3. Select the M3U file: {output_path}")
+        print(f"\nThe M3U file contains all {len(songs)} songs from the setlist.")
+        return
 
     # Add songs to playlist
     print("\nAdding songs to playlist:")
