@@ -2,20 +2,31 @@
 
 Automatically create Apple Music playlists from setlist.fm concert setlists.
 
+**Cross-platform support:** Works on macOS, Windows, and Linux!
+
 ## Features
 
 - Fetch setlist data from any setlist.fm URL
-- Automatically create a playlist in Apple Music
+- **Cross-platform support:**
+  - **macOS**: Automatically create playlists via AppleScript
+  - **Windows**: Automatically create playlists via COM (iTunes/Apple Music)
+  - **Linux/Other**: Export M3U playlists for manual import
 - Search and add songs to the playlist
 - Support for cover songs (uses the original artist)
+- M3U export option for all platforms
 - Detailed progress reporting
 
 ## Requirements
 
-- macOS (required for Apple Music integration via AppleScript)
 - Python 3.7 or higher
-- Apple Music app
-- setlist.fm API key
+- Apple Music or iTunes (for automatic playlist creation)
+- setlist.fm API key (free)
+
+### Platform-Specific Requirements
+
+- **macOS**: Apple Music app (uses AppleScript)
+- **Windows**: iTunes or Apple Music for Windows (uses COM interface)
+- **Linux/Other**: Any music player that supports M3U playlists
 
 ## Installation
 
@@ -30,20 +41,31 @@ cd setlist-apple
 pip install -r requirements.txt
 ```
 
+   **Windows users**: The installer will automatically install `pywin32` which is required for COM automation.
+
 3. Get a setlist.fm API key:
    - Go to https://www.setlist.fm/settings/api
    - Sign in or create an account
    - Request an API key (it's free!)
 
 4. Set your API key as an environment variable:
-```bash
-export SETLISTFM_API_KEY='your-api-key-here'
-```
 
-Or add it to your `~/.zshrc` or `~/.bash_profile`:
-```bash
-echo 'export SETLISTFM_API_KEY="your-api-key-here"' >> ~/.zshrc
-```
+   **macOS/Linux:**
+   ```bash
+   export SETLISTFM_API_KEY='your-api-key-here'
+   ```
+
+   Or add it to your `~/.zshrc` or `~/.bash_profile`:
+   ```bash
+   echo 'export SETLISTFM_API_KEY="your-api-key-here"' >> ~/.zshrc
+   ```
+
+   **Windows (PowerShell):**
+   ```powershell
+   $env:SETLISTFM_API_KEY='your-api-key-here'
+   ```
+
+   Or set it permanently via System Properties > Environment Variables
 
 ## Usage
 
@@ -62,6 +84,11 @@ With API key as argument:
 python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html" --api-key "your-api-key"
 ```
 
+Export to M3U file (for manual import):
+```bash
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html" --export-only --output "my_playlist.m3u"
+```
+
 ### Example
 
 ```bash
@@ -78,7 +105,10 @@ This will:
 
 1. **Fetch**: The script uses the setlist.fm API to retrieve setlist data
 2. **Parse**: Extracts song names and artist information (including cover songs)
-3. **Create**: Creates a new playlist in Apple Music via AppleScript
+3. **Create**: Creates a new playlist using the appropriate method:
+   - **macOS**: AppleScript automation
+   - **Windows**: COM interface (iTunes/Apple Music)
+   - **Other/Fallback**: M3U file export
 4. **Search**: Searches Apple Music's library for each song
 5. **Add**: Adds found songs to the playlist
 
@@ -96,17 +126,29 @@ This will:
 - Make sure you've set the `SETLISTFM_API_KEY` environment variable
 - Or pass the API key using the `--api-key` flag
 
-**"Error: This script requires macOS"**
-- This script uses AppleScript to control Apple Music, which only works on macOS
+**Windows: "pywin32 package required"**
+- Install pywin32: `pip install pywin32`
+- Or reinstall all requirements: `pip install -r requirements.txt`
 
-**"AppleScript error"**
+**Windows: "Could not connect to Apple Music/iTunes"**
+- Make sure iTunes or Apple Music for Windows is installed
+- Try launching the application manually first
+- If issues persist, use `--export-only` to create an M3U file instead
+
+**macOS: "AppleScript error"**
 - Make sure Apple Music is installed and accessible
+- Grant Terminal/your IDE permission to control Apple Music (System Settings > Privacy & Security > Automation)
 - Try running Apple Music manually first
 
 **"Songs not found"**
 - Some songs may not be available in Apple Music
 - Song names from setlist.fm might not exactly match Apple Music's catalog
 - Try searching manually in Apple Music to verify availability
+
+**Platform not supported / Automatic fallback to M3U**
+- The script will automatically export an M3U file
+- Import it manually: Apple Music > File > Library > Import Playlist
+- You can also force M3U export with the `--export-only` flag
 
 ## License
 
