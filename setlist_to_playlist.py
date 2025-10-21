@@ -172,14 +172,16 @@ class AppleMusicWindowsController(MusicController):
             )
 
     def _get_itunes(self):
-        """Get iTunes/Apple Music COM object"""
+        """Get Apple Music/iTunes COM object"""
         if self.itunes is None:
             try:
-                # Try Apple Music first, then iTunes
+                # Try Apple Music first, then iTunes as fallback
                 try:
-                    self.itunes = self.win32com.Dispatch("iTunes.Application")
-                except:
                     self.itunes = self.win32com.Dispatch("AppleMusic.Application")
+                    print("Connected to Apple Music")
+                except:
+                    self.itunes = self.win32com.Dispatch("iTunes.Application")
+                    print("Connected to iTunes")
             except Exception as e:
                 raise RuntimeError(
                     f"Could not connect to Apple Music/iTunes: {e}\n"
