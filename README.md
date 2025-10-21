@@ -30,25 +30,44 @@ Automatically create Apple Music playlists from setlist.fm concert setlists.
 
 ## Installation
 
-1. Clone this repository:
-```bash
-git clone https://github.com/yourusername/setlist-apple.git
+### Windows Users - Quick Start
+
+**Option 1: Automated Setup (Recommended)**
+1. Download this repository
+2. Double-click `setup.bat` to install dependencies automatically
+3. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for detailed instructions
+
+**Option 2: Manual Setup**
+```powershell
+# Navigate to the folder
 cd setlist-apple
+
+# Install dependencies
+python -m pip install -r requirements.txt
+
+# If 'python' doesn't work, try:
+py -m pip install -r requirements.txt
 ```
 
-2. Install Python dependencies:
+### macOS/Linux Users
+
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/setlist-apple.git
+cd setlist-apple
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-   **Windows users**: The installer will automatically install `pywin32` which is required for COM automation.
+### Get API Key
 
-3. Get a setlist.fm API key:
+1. Get a setlist.fm API key:
    - Go to https://www.setlist.fm/settings/api
    - Sign in or create an account
    - Request an API key (it's free!)
 
-4. Set your API key as an environment variable:
+2. Set your API key as an environment variable:
 
    **macOS/Linux:**
    ```bash
