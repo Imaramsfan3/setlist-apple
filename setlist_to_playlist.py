@@ -493,22 +493,53 @@ class AppleMusicWebController(MusicController):
 
     def _is_logged_in(self) -> bool:
         try:
-            # Check for account button in header
-            self._page.wait_for_selector('button[data-testid="account-button"]', timeout=5000)
-            return True
-        except self.PlaywrightTimeout:
-            # Try alternate selector
-            try:
-                self._page.wait_for_selector('[aria-label="Account"]', timeout=2000)
-                return True
-            except:
-                return False
+            # Try multiple possible selectors for logged-in state
+            selectors = [
+                'button[data-testid="account-button"]',
+                '[aria-label="Account"]',
+                'button[aria-label="Account menu"]',
+                '[class*="account"]',
+                'nav a[href*="account"]',
+                # Check if we can access library (only works when logged in)
+                'a[href*="library"]',
+                '[href="/library"]'
+            ]
+
+            for selector in selectors:
+                try:
+                    self._page.wait_for_selector(selector, timeout=2000)
+                    return True
+                except:
+                    continue
+
+            return False
+        except:
+            return False
 
     def _wait_for_login(self):
-        # Wait up to 5 minutes for user to log in
-        try:
-            self._page.wait_for_selector('button[data-testid="account-button"]', timeout=300000)
-        except self.PlaywrightTimeout:
+        print("Waiting for login... (or press Enter if you're already logged in)")
+
+        import threading
+        login_detected = {'done': False}
+
+        # Thread to wait for Enter key
+        def wait_for_enter():
+            input()  # Wait for user to press Enter
+            login_detected['done'] = True
+
+        enter_thread = threading.Thread(target=wait_for_enter, daemon=True)
+        enter_thread.start()
+
+        # Try to detect login automatically
+        start_time = time.time()
+        while not login_detected['done'] and (time.time() - start_time) < 300:  # 5 min timeout
+            if self._is_logged_in():
+                login_detected['done'] = True
+                print("\n✓ Login detected!")
+                break
+            time.sleep(2)
+
+        if not login_detected['done']:
             raise RuntimeError("Login timeout — please try again")
 
     def create_playlist(self, name: str) -> None:
