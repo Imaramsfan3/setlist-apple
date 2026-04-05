@@ -591,66 +591,130 @@ class AppleMusicWebController(MusicController):
 
     def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
         try:
-            # Search for the song
             query = f"{song_name} {artist_name}"
 
-            # Click search box
-            search_selectors = [
-                'input[type="search"]',
-                '[placeholder="Search"]',
-                '[aria-label="Search"]'
-            ]
+            # Navigate to search by typing in URL
+            self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(query)}",
+                          wait_until="networkidle")
+            time.sleep(3)  # Give time for results to load
 
-            for selector in search_selectors:
-                try:
-                    self._page.click(selector, timeout=2000)
-                    break
-                except:
-                    continue
-
-            # Clear and type search query
-            self._page.keyboard.press("Control+A" if sys.platform == "win32" else "Meta+A")
-            self._page.keyboard.press("Backspace")
-            self._page.keyboard.type(query)
-            self._page.keyboard.press("Enter")
-
-            # Wait for results
-            time.sleep(3)
-
-            # Find first song result and add to playlist
-            # Look for the first song in results
-            song_selectors = [
-                '[data-testid="song-result"]',
+            # Look for song results
+            # Try to find any song result elements
+            result_found = False
+            result_selectors = [
+                '[data-testid="track-lockup"]',
                 '.songs-list-row',
-                '[role="row"]'
+                '[role="row"]',
+                '.lockup--song',
+                'div[class*="song"]',
+                'div[class*="track"]'
             ]
 
-            # Right-click on first result to open context menu
-            for selector in song_selectors:
+            result_element = None
+            for selector in result_selectors:
                 try:
                     elements = self._page.query_selector_all(selector)
-                    if elements:
-                        elements[0].click(button="right", timeout=2000)
-                        time.sleep(1)
-
-                        # Click "Add to Playlist" in context menu
-                        self._page.click('text="Add to Playlist"', timeout=2000)
-                        time.sleep(1)
-
-                        # Find our playlist in the list
-                        self._page.click(f'text="{playlist_name}"', timeout=3000)
-                        time.sleep(1)
-
-                        print(f"  ✓ Added: {song_name} - {artist_name}")
-                        return True
+                    if elements and len(elements) > 0:
+                        result_element = elements[0]
+                        result_found = True
+                        break
                 except:
                     continue
 
-            print(f"  ✗ Not found: {song_name} - {artist_name}")
+            if not result_found:
+                print(f"  ✗ No results found for: {song_name} - {artist_name}")
+                return False
+
+            # Try different methods to add the song
+            added = False
+
+            # Method 1: Hover and click the "add" button
+            try:
+                result_element.hover()
+                time.sleep(0.5)
+
+                # Look for add button
+                add_buttons = [
+                    'button[aria-label*="Add"]',
+                    'button[title*="Add"]',
+                    '[data-testid="add-button"]',
+                    'button[class*="add"]'
+                ]
+
+                for btn_selector in add_buttons:
+                    try:
+                        add_btn = result_element.query_selector(btn_selector)
+                        if not add_btn:
+                            add_btn = self._page.query_selector(btn_selector)
+                        if add_btn:
+                            add_btn.click()
+                            time.sleep(1)
+
+                            # Look for playlist selector in dropdown
+                            try:
+                                self._page.click(f'text="{playlist_name}"', timeout=3000)
+                                print(f"  ✓ Added: {song_name} - {artist_name}")
+                                return True
+                            except:
+                                # Try clicking "Add to a Playlist" option
+                                try:
+                                    self._page.click('text="Add to a Playlist"', timeout=2000)
+                                    time.sleep(1)
+                                    self._page.click(f'text="{playlist_name}"', timeout=3000)
+                                    print(f"  ✓ Added: {song_name} - {artist_name}")
+                                    return True
+                                except:
+                                    pass
+                    except:
+                        continue
+            except Exception as e:
+                pass
+
+            # Method 2: Right-click context menu
+            try:
+                result_element.click(button="right")
+                time.sleep(1)
+
+                # Look for "Add to Playlist" in context menu
+                add_menu_texts = [
+                    'text="Add to Playlist"',
+                    'text="Add to a Playlist"',
+                    '[role="menuitem"]:has-text("Playlist")'
+                ]
+
+                for menu_selector in add_menu_texts:
+                    try:
+                        self._page.click(menu_selector, timeout=2000)
+                        time.sleep(1)
+                        self._page.click(f'text="{playlist_name}"', timeout=3000)
+                        print(f"  ✓ Added: {song_name} - {artist_name}")
+                        return True
+                    except:
+                        continue
+            except:
+                pass
+
+            # Method 3: Click the song to open details, then add
+            try:
+                result_element.click()
+                time.sleep(2)
+
+                # Look for add/more button in detail view
+                self._page.click('button[aria-label*="More"]', timeout=3000)
+                time.sleep(1)
+                self._page.click('text="Add to Playlist"', timeout=2000)
+                time.sleep(1)
+                self._page.click(f'text="{playlist_name}"', timeout=3000)
+                print(f"  ✓ Added: {song_name} - {artist_name}")
+                return True
+            except:
+                pass
+
+            print(f"  ✗ Could not add: {song_name} - {artist_name} (found result but couldn't click add)")
             return False
 
         except Exception as e:
-            print(f"  ✗ Error adding {song_name}: {e}")
+            print(f"  ✗ Error: {song_name} - {str(e)}")
             return False
 
     def __del__(self):
