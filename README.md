@@ -2,49 +2,66 @@
 
 Automatically create Apple Music playlists from setlist.fm concert setlists.
 
-Works on **Windows, macOS, and Linux** via the official Apple Music REST API.
+Works on **Windows, macOS, and Linux**.
+
+## Quick Start (Windows Users — Easiest Method)
+
+```powershell
+# 1. Install dependencies
+python -m pip install -r requirements.txt
+python -m playwright install chromium
+
+# 2. Get setlist.fm API key (free)
+# Visit: https://www.setlist.fm/settings/api
+
+# 3. Run with web automation
+$env:SETLISTFM_API_KEY='your-key-here'
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/..." --use-web
+```
+
+**First run:** A browser opens to music.apple.com — sign in once, session is saved.  
+**Subsequent runs:** Fully automatic, no login needed.
+
+---
 
 ## How It Works
 
 1. Fetches the setlist from setlist.fm using their API
-2. Authenticates with Apple Music (one-time browser login, token cached after)
-3. Searches the Apple Music catalog for each song
-4. Creates the playlist and adds the songs automatically
+2. Opens a browser to music.apple.com (or uses saved login session)
+3. Creates the playlist automatically
+4. Searches for each song and adds it to the playlist
 
-## Controller Priority
-
-The script picks the best available method automatically:
-
-| Priority | Method | Platform | Requires |
-|----------|--------|----------|---------|
-| 1 | **Apple Music REST API** | All platforms | Apple Developer credentials (one-time setup) |
-| 2 | **AppleScript** | macOS only | Apple Music app |
-| 3 | **COM interface** | Windows only | iTunes or Apple Music for Windows |
-| 4 | **M3U export** | Any | Nothing — manual import |
+---
 
 ## Installation
 
 ```powershell
 # Windows
 python -m pip install -r requirements.txt
+python -m playwright install chromium
 
 # macOS / Linux
 pip install -r requirements.txt
+playwright install chromium
 ```
 
-> **Windows users:** If `python` is not recognised, download Python from
-> https://www.python.org/downloads/ — check **"Add Python to PATH"** during install,
-> then restart PowerShell. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for details.
+> **Windows users:** If `python` is not recognized:
+> 1. Download Python from https://www.python.org/downloads/
+> 2. During install, check **"Add Python to PATH"**
+> 3. Restart PowerShell
+> 4. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for detailed help
+
+---
 
 ## Setup
 
-### 1. setlist.fm API Key (required)
+### Required: setlist.fm API Key
 
 Get a free key at https://www.setlist.fm/settings/api
 
 ```powershell
 # Windows PowerShell (current session)
-$env:SETLISTFM_API_KEY='your-key'
+$env:SETLISTFM_API_KEY='your-key-here'
 
 # Windows — set permanently
 [System.Environment]::SetEnvironmentVariable('SETLISTFM_API_KEY','your-key','User')
@@ -52,98 +69,158 @@ $env:SETLISTFM_API_KEY='your-key'
 
 ```bash
 # macOS / Linux
-export SETLISTFM_API_KEY='your-key'
-```
-
----
-
-### 2. Apple Music API Credentials (recommended — works on all platforms)
-
-This is a one-time setup that takes about 10 minutes.
-
-**Step 1 — Create a MusicKit key**
-
-1. Sign in at https://developer.apple.com/account *(free account works)*
-2. Go to **Certificates, IDs & Profiles → Keys**
-3. Click **+** to create a new key
-4. Name it anything (e.g. "Setlist Playlist"), enable **MusicKit**
-5. Click **Continue → Register → Download** — save the `.p8` file somewhere safe
-6. Note the **Key ID** shown on the download page
-
-**Step 2 — Find your Team ID**
-
-Your Team ID is shown in the top-right corner of your Apple Developer account page
-(e.g. `ABC123DEFG`).
-
-**Step 3 — Set environment variables**
-
-```powershell
-# Windows PowerShell (current session)
-$env:APPLE_TEAM_ID='XXXXXXXXXX'
-$env:APPLE_KEY_ID='XXXXXXXXXX'
-$env:APPLE_PRIVATE_KEY='C:\Users\you\AuthKey_XXXXXXXXXX.p8'
-
-# Windows — set permanently
-[System.Environment]::SetEnvironmentVariable('APPLE_TEAM_ID','XXXXXXXXXX','User')
-[System.Environment]::SetEnvironmentVariable('APPLE_KEY_ID','XXXXXXXXXX','User')
-[System.Environment]::SetEnvironmentVariable('APPLE_PRIVATE_KEY','C:\path\to\key.p8','User')
-```
-
-```bash
-# macOS / Linux
-export APPLE_TEAM_ID='XXXXXXXXXX'
-export APPLE_KEY_ID='XXXXXXXXXX'
-export APPLE_PRIVATE_KEY='/path/to/AuthKey_XXXXXXXXXX.p8'
+export SETLISTFM_API_KEY='your-key-here'
 ```
 
 ---
 
 ## Usage
 
+### Method 1: Web Automation (Recommended — Free, Works Everywhere)
+
 ```powershell
-# Basic — creates playlist in Apple Music
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
-
-# Custom playlist name
-python setlist_to_playlist.py "URL" --playlist-name "My Playlist"
-
-# Export M3U file only (no Apple Music account needed)
-python setlist_to_playlist.py "URL" --export-only --output my_playlist.m3u
-
-# Clear cached user token and re-authorize
-python setlist_to_playlist.py "URL" --re-auth
+python setlist_to_playlist.py "URL" --use-web
 ```
 
-**First run with Apple Music API:** A browser window will open asking you to sign in to
-Apple Music and grant access. After that, the token is cached at `~/.setlist_apple_user_token`
-and you won't be asked again (token lasts ~6 months).
+**Pros:**
+- ✅ Free — no paid accounts needed
+- ✅ Works on Windows, macOS, Linux
+- ✅ One-time login, then fully automatic
+- ✅ Creates playlists and adds songs automatically
+
+**How it works:**
+- Opens Chromium browser
+- Navigates to music.apple.com
+- Automates playlist creation and song additions
+- Session is saved so you only log in once
+
+**First time:**
+1. Browser opens to music.apple.com
+2. Sign in with your Apple ID
+3. Script continues automatically after login
+4. Session saved to `~/.setlist_apple_web_session.json`
+
+**After first time:** No login needed — fully automatic.
+
+---
+
+### Method 2: M3U Export (Manual Import)
+
+```powershell
+python setlist_to_playlist.py "URL" --export-only
+```
+
+Creates an `.m3u` playlist file.
+
+**To import:**
+1. Open Apple Music
+2. **File → Library → Import Playlist**
+3. Select the `.m3u` file
+
+---
+
+### Method 3: Apple Music REST API (Advanced)
+
+Requires Apple Developer credentials (£79/year — only needed if you want pure API access).
+
+For most users, **web automation (Method 1) is better** — it's free and just as automatic.
+
+<details>
+<summary>Click to see API setup (optional)</summary>
+
+1. Sign in at https://developer.apple.com/account
+2. Go to **Certificates, IDs & Profiles → Keys**
+3. Create a new key, enable **MusicKit**, download `.p8` file
+4. Note your **Team ID** and **Key ID**
+
+```powershell
+$env:APPLE_TEAM_ID='XXXXXXXXXX'
+$env:APPLE_KEY_ID='XXXXXXXXXX'
+$env:APPLE_PRIVATE_KEY='C:\path\to\AuthKey_XXXXXXXXXX.p8'
+```
+
+Then run:
+```powershell
+python setlist_to_playlist.py "URL"
+```
+
+</details>
+
+---
+
+## Examples
+
+```powershell
+# Basic — web automation (recommended)
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/2024/venue-id.html" --use-web
+
+# Custom playlist name
+python setlist_to_playlist.py "URL" --use-web --playlist-name "My Concert 2024"
+
+# M3U export only
+python setlist_to_playlist.py "URL" --export-only --output my_playlist.m3u
+
+# Clear saved web session and re-login
+python setlist_to_playlist.py "URL" --use-web --re-auth
+```
+
+---
+
+## Controller Priority
+
+The script picks the best method automatically:
+
+| Priority | Method | Platform | Free? | Setup |
+|----------|--------|----------|-------|-------|
+| 1 | **Apple Music API** | All | No (£79/year) | Apple Developer account |
+| 2 | **Web automation** (`--use-web`) | All | ✅ Yes | One-time browser login |
+| 3 | **AppleScript** | macOS only | ✅ Yes | None |
+| 4 | **COM** | Windows (rarely works) | ✅ Yes | iTunes installed |
+| 5 | **M3U export** | All | ✅ Yes | Manual import |
+
+**For Windows:** Use `--use-web` (web automation). COM doesn't work with Apple Music for Windows.
+
+---
 
 ## Troubleshooting
 
-**`python` / `pip` not recognised (Windows)**
+**`python` / `pip` not recognized (Windows)**
 - Reinstall Python and tick **"Add Python to PATH"**
-- Use `python -m pip` instead of `pip`
+- Or use `python -m pip install ...` instead of `pip install ...`
 
-**`No module named 'jwt'`**
+**`No module named 'playwright'`**
 ```powershell
-python -m pip install PyJWT cryptography
+python -m pip install playwright
+python -m playwright install chromium
 ```
 
-**Apple Music API — `401 Unauthorized`**
-- Your cached user token may have expired. Run with `--re-auth` to re-authorize.
-- Double-check `APPLE_TEAM_ID`, `APPLE_KEY_ID`, and `APPLE_PRIVATE_KEY` are set correctly.
+**Web automation: "Login timeout"**
+- Make sure to click "Sign In" in the browser window
+- You have 5 minutes to log in
 
-**Apple Music API — `invalid_client` in browser**
-- Make sure MusicKit is enabled on the key in your Apple Developer account.
-- Regenerate the key if needed.
+**Web automation: Browser doesn't open**
+- Check if another browser window opened in the background
+- Make sure Chromium installed: `python -m playwright install chromium`
 
-**Windows COM — `Invalid class string`**
-- Apple Music for Windows does not expose a COM interface.
-- Set up Apple Music API credentials (see above) for full Windows support.
+**Web automation: "Failed to create playlist"**
+- The music.apple.com interface may have changed
+- Try using `--export-only` for M3U export instead
+- Or wait for an update to the script
 
 **Songs not found**
-- The song may not be available in your region's Apple Music catalog.
-- The setlist.fm name may differ from the Apple Music title (e.g. live edits, alternate titles).
+- Song may not be available in your region's Apple Music catalog
+- Setlist.fm name may differ from Apple Music title
+
+---
+
+## What Gets Installed
+
+- **requests** — HTTP library for setlist.fm API
+- **PyJWT** + **cryptography** — JWT tokens (only for API method)
+- **playwright** — Browser automation for web method
+- **pywin32** — Windows COM (only on Windows)
+
+---
 
 ## License
 

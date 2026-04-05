@@ -435,6 +435,201 @@ class AppleMusicWindowsController(MusicController):
 
 
 # ---------------------------------------------------------------------------
+# Apple Music Web Controller (cross-platform browser automation)
+# ---------------------------------------------------------------------------
+
+class AppleMusicWebController(MusicController):
+    """
+    Automates music.apple.com using Playwright browser automation.
+    Works on Windows, macOS, and Linux.
+
+    First run: Opens browser for you to log in, saves session.
+    Subsequent runs: Uses saved session (no login needed).
+    """
+
+    SESSION_FILE = Path.home() / ".setlist_apple_web_session.json"
+
+    def __init__(self):
+        try:
+            from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+            self.PlaywrightTimeout = PlaywrightTimeout
+        except ImportError:
+            raise ImportError(
+                "Playwright required for web automation.\n"
+                "Install with:\n"
+                "  python -m pip install playwright\n"
+                "  python -m playwright install chromium"
+            )
+
+        print("Starting browser automation...")
+        self._playwright = sync_playwright().start()
+        self._browser = self._playwright.chromium.launch(headless=False)
+
+        # Load saved session if exists
+        storage_state = str(self.SESSION_FILE) if self.SESSION_FILE.exists() else None
+        self._context = self._browser.new_context(storage_state=storage_state)
+        self._page = self._context.new_page()
+        self._page.goto("https://music.apple.com", wait_until="networkidle")
+
+        # Check if logged in
+        if not self._is_logged_in():
+            print("\n" + "="*60)
+            print("PLEASE LOG IN TO APPLE MUSIC")
+            print("="*60)
+            print("A browser window has opened to music.apple.com")
+            print("Please sign in with your Apple ID")
+            print("The script will continue automatically after login...\n")
+            self._wait_for_login()
+            # Save session
+            self._context.storage_state(path=str(self.SESSION_FILE))
+            print("✓ Login saved — you won't need to log in again\n")
+        else:
+            print("✓ Using saved login session\n")
+
+        self._playlist_url = None
+
+    def _is_logged_in(self) -> bool:
+        try:
+            # Check for account button in header
+            self._page.wait_for_selector('button[data-testid="account-button"]', timeout=5000)
+            return True
+        except self.PlaywrightTimeout:
+            # Try alternate selector
+            try:
+                self._page.wait_for_selector('[aria-label="Account"]', timeout=2000)
+                return True
+            except:
+                return False
+
+    def _wait_for_login(self):
+        # Wait up to 5 minutes for user to log in
+        try:
+            self._page.wait_for_selector('button[data-testid="account-button"]', timeout=300000)
+        except self.PlaywrightTimeout:
+            raise RuntimeError("Login timeout — please try again")
+
+    def create_playlist(self, name: str) -> None:
+        print(f"Creating playlist via web: {name}")
+
+        try:
+            # Navigate to Library
+            self._page.goto("https://music.apple.com/library/playlists", wait_until="networkidle")
+            time.sleep(2)
+
+            # Look for "New Playlist" button
+            # Try multiple possible selectors
+            new_playlist_selectors = [
+                'button:has-text("New Playlist")',
+                'button[aria-label="New Playlist"]',
+                '[data-testid="new-playlist-button"]',
+                'button:has-text("Create")'
+            ]
+
+            clicked = False
+            for selector in new_playlist_selectors:
+                try:
+                    self._page.click(selector, timeout=3000)
+                    clicked = True
+                    break
+                except:
+                    continue
+
+            if not clicked:
+                # Fallback: try keyboard shortcut (Cmd+N / Ctrl+N)
+                print("  Trying keyboard shortcut to create playlist...")
+                self._page.keyboard.press("Control+N" if sys.platform == "win32" else "Meta+N")
+                time.sleep(1)
+
+            # Enter playlist name
+            time.sleep(1)
+            # The name input should be focused, just type
+            self._page.keyboard.type(name)
+            self._page.keyboard.press("Enter")
+            time.sleep(2)
+
+            # Store the playlist URL for adding songs
+            self._playlist_url = self._page.url
+            print(f"✓ Created playlist: {name}")
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to create playlist: {e}\n"
+                             "The web interface may have changed. Try the M3U export instead.")
+
+    def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
+        try:
+            # Search for the song
+            query = f"{song_name} {artist_name}"
+
+            # Click search box
+            search_selectors = [
+                'input[type="search"]',
+                '[placeholder="Search"]',
+                '[aria-label="Search"]'
+            ]
+
+            for selector in search_selectors:
+                try:
+                    self._page.click(selector, timeout=2000)
+                    break
+                except:
+                    continue
+
+            # Clear and type search query
+            self._page.keyboard.press("Control+A" if sys.platform == "win32" else "Meta+A")
+            self._page.keyboard.press("Backspace")
+            self._page.keyboard.type(query)
+            self._page.keyboard.press("Enter")
+
+            # Wait for results
+            time.sleep(3)
+
+            # Find first song result and add to playlist
+            # Look for the first song in results
+            song_selectors = [
+                '[data-testid="song-result"]',
+                '.songs-list-row',
+                '[role="row"]'
+            ]
+
+            # Right-click on first result to open context menu
+            for selector in song_selectors:
+                try:
+                    elements = self._page.query_selector_all(selector)
+                    if elements:
+                        elements[0].click(button="right", timeout=2000)
+                        time.sleep(1)
+
+                        # Click "Add to Playlist" in context menu
+                        self._page.click('text="Add to Playlist"', timeout=2000)
+                        time.sleep(1)
+
+                        # Find our playlist in the list
+                        self._page.click(f'text="{playlist_name}"', timeout=3000)
+                        time.sleep(1)
+
+                        print(f"  ✓ Added: {song_name} - {artist_name}")
+                        return True
+                except:
+                    continue
+
+            print(f"  ✗ Not found: {song_name} - {artist_name}")
+            return False
+
+        except Exception as e:
+            print(f"  ✗ Error adding {song_name}: {e}")
+            return False
+
+    def __del__(self):
+        try:
+            if hasattr(self, '_browser'):
+                self._browser.close()
+            if hasattr(self, '_playwright'):
+                self._playwright.stop()
+        except:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # M3U exporter
 # ---------------------------------------------------------------------------
 
@@ -460,9 +655,11 @@ def get_controller(args) -> Optional[MusicController]:
     """
     Priority:
       1. Apple Music REST API  — if APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY are set
-      2. macOS AppleScript     — on darwin
-      3. Windows COM           — on win32
-      4. None → M3U export
+      2. Web automation        — if --use-web flag
+      3. macOS AppleScript     — on darwin
+      4. Windows COM           — on win32 (rarely works)
+      5. Web automation        — fallback for Windows if COM fails
+      6. None → M3U export
     """
     if args.export_only:
         return None
@@ -479,22 +676,39 @@ def get_controller(args) -> Optional[MusicController]:
         print("Using Apple Music REST API (cross-platform)\n")
         return AppleMusicAPIController(team_id, key_id, key_path)
 
-    # 2. macOS AppleScript
+    # 2. Web automation (if explicitly requested)
+    if args.use_web:
+        try:
+            return AppleMusicWebController()
+        except ImportError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+    # 3. macOS AppleScript
     if sys.platform == "darwin":
         print("Using AppleScript (macOS)\n")
         return AppleMusicMacController()
 
-    # 3. Windows COM
+    # 4. Windows COM
     if sys.platform == "win32":
         try:
             return AppleMusicWindowsController()
         except (ImportError, RuntimeError) as e:
-            print(f"Warning: {e}\nFalling back to M3U export.\n")
-            return None
+            print(f"Windows COM not available: {e}")
+            print("\nTrying web automation instead...\n")
+            # 5. Fallback to web automation
+            try:
+                return AppleMusicWebController()
+            except ImportError:
+                print("Web automation not available. Install with:")
+                print("  python -m pip install playwright")
+                print("  python -m playwright install chromium\n")
+                print("Falling back to M3U export.\n")
+                return None
 
-    # 4. Fallback
+    # 6. Fallback
     print(f"Platform '{sys.platform}' not supported for direct playlist creation.")
-    print("Falling back to M3U export.\n")
+    print("Use --use-web for browser automation, or --export-only for M3U file.\n")
     return None
 
 
@@ -517,9 +731,14 @@ Apple Music API setup (recommended — works on Windows, macOS, Linux):
        APPLE_KEY_ID=XXXXXXXXXX
        APPLE_PRIVATE_KEY=C:\\path\\to\\AuthKey_XXXXXXXXXX.p8
 
+Web automation (free, works on Windows/macOS/Linux):
+  %(prog)s "URL" --use-web
+  (Opens a browser, automates music.apple.com — no API keys needed)
+  First run: log in once, session is saved for future runs
+
 Examples:
   %(prog)s "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
-  %(prog)s "URL" --playlist-name "My Playlist"
+  %(prog)s "URL" --use-web --playlist-name "My Playlist"
   %(prog)s "URL" --export-only --output playlist.m3u
   %(prog)s "URL" --re-auth   (clear cached user token and re-authorize)
         """
@@ -533,6 +752,8 @@ Examples:
     parser.add_argument("--output", help="Output path for M3U file")
     parser.add_argument("--re-auth", action="store_true",
                         help="Clear cached Apple Music user token and re-authorize")
+    parser.add_argument("--use-web", action="store_true",
+                        help="Use web browser automation (music.apple.com) - works on all platforms")
     # Apple Music API credentials (can also be set via env vars)
     parser.add_argument("--apple-team-id", default=None, help="Apple Developer Team ID")
     parser.add_argument("--apple-key-id", default=None, help="MusicKit Key ID")
