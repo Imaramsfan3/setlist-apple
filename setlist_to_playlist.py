@@ -472,7 +472,11 @@ class AppleMusicWebController(MusicController):
         storage_state = str(self.SESSION_FILE) if self.SESSION_FILE.exists() else None
         self._context = self._browser.new_context(storage_state=storage_state)
         self._page = self._context.new_page()
-        self._page.goto("https://music.apple.com", wait_until="networkidle")
+
+        # Set longer timeout and use 'load' instead of 'networkidle' (Apple Music keeps making requests)
+        self._page.set_default_timeout(60000)  # 60 seconds
+        self._page.goto("https://music.apple.com", wait_until="load")
+        time.sleep(3)  # Give UI time to render
 
         # Check if logged in
         if not self._is_logged_in():
@@ -547,8 +551,8 @@ class AppleMusicWebController(MusicController):
 
         try:
             # Navigate to Library
-            self._page.goto("https://music.apple.com/library/playlists", wait_until="networkidle")
-            time.sleep(2)
+            self._page.goto("https://music.apple.com/library/playlists", wait_until="load")
+            time.sleep(3)
 
             # Look for "New Playlist" button
             # Try multiple possible selectors
@@ -595,8 +599,8 @@ class AppleMusicWebController(MusicController):
 
             # Navigate to search by typing in URL
             self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(query)}",
-                          wait_until="networkidle")
-            time.sleep(3)  # Give time for results to load
+                          wait_until="load")
+            time.sleep(4)  # Give time for results to render
 
             # Look for song results
             # Try to find any song result elements
