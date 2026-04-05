@@ -478,6 +478,13 @@ class AppleMusicWebController(MusicController):
         self._page.goto("https://music.apple.com", wait_until="load")
         time.sleep(3)  # Give UI time to render
 
+        # Extract the storefront (region) from the redirected URL
+        # e.g., https://music.apple.com/us/ -> 'us'
+        current_url = self._page.url
+        storefront_match = re.search(r'music\.apple\.com/([a-z]{2})/', current_url)
+        self._storefront = storefront_match.group(1) if storefront_match else 'us'
+        print(f"Detected region: {self._storefront}")
+
         # Check if logged in
         if not self._is_logged_in():
             print("\n" + "="*60)
@@ -491,9 +498,10 @@ class AppleMusicWebController(MusicController):
             self._context.storage_state(path=str(self.SESSION_FILE))
             print("✓ Login saved — you won't need to log in again\n")
         else:
-            print("✓ Using saved login session\n")
+            print("✓ Using saved login session")
 
         self._playlist_url = None
+        print()  # Blank line for readability
 
     def _is_logged_in(self) -> bool:
         try:
@@ -550,8 +558,9 @@ class AppleMusicWebController(MusicController):
         print(f"Creating playlist via web: {name}")
 
         try:
-            # Navigate to Library
-            self._page.goto("https://music.apple.com/library/playlists", wait_until="load")
+            # Navigate to Library (use storefront-specific URL)
+            library_url = f"https://music.apple.com/{self._storefront}/library/playlists"
+            self._page.goto(library_url, wait_until="load")
             time.sleep(3)
 
             # Look for "New Playlist" button
@@ -598,9 +607,9 @@ class AppleMusicWebController(MusicController):
             # Try searching with both song and artist first
             query = f"{song_name} {artist_name}"
 
-            # Navigate to search by typing in URL
-            self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(query)}",
-                          wait_until="load")
+            # Navigate to search by typing in URL (include storefront/region)
+            search_url = f"https://music.apple.com/{self._storefront}/search?term={urllib.parse.quote(query)}"
+            self._page.goto(search_url, wait_until="load")
             time.sleep(3)
 
             # Check for "No Results" message first
@@ -623,8 +632,8 @@ class AppleMusicWebController(MusicController):
             if has_no_results:
                 # Try again with just the song name
                 print(f"  ⟳ No results with artist, trying just song name...")
-                self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(song_name)}",
-                              wait_until="load")
+                search_url = f"https://music.apple.com/{self._storefront}/search?term={urllib.parse.quote(song_name)}"
+                self._page.goto(search_url, wait_until="load")
                 time.sleep(3)
 
                 # Check again for no results
