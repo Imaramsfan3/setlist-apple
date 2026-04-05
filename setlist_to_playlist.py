@@ -36,7 +36,10 @@ class SetlistFMClient:
         self.headers = {"x-api-key": api_key, "Accept": "application/json"}
 
     def extract_setlist_id(self, url: str) -> Optional[str]:
-        match = re.search(r'setlist\.fm/setlist/[^/]+/\d+/([^/]+)\.html', url)
+        # Extract the hex ID from the end of the URL
+        # Format: .../artist/year/venue-name-HEXID.html
+        # We want just the HEXID part (8 hex characters at the end)
+        match = re.search(r'-([0-9a-f]{8})\.html', url)
         return match.group(1) if match else None
 
     def get_setlist(self, setlist_id: str) -> Dict:
