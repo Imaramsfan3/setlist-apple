@@ -595,15 +595,48 @@ class AppleMusicWebController(MusicController):
 
     def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
         try:
+            # Try searching with both song and artist first
             query = f"{song_name} {artist_name}"
 
             # Navigate to search by typing in URL
             self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(query)}",
                           wait_until="load")
-            time.sleep(4)  # Give time for results to render
+            time.sleep(3)
 
-            # Look for song results
-            # Try to find any song result elements
+            # Check for "No Results" message first
+            no_results_selectors = [
+                'text="No Results"',
+                'text="No results found"',
+                '[class*="no-results"]',
+                '[class*="empty-state"]'
+            ]
+
+            has_no_results = False
+            for selector in no_results_selectors:
+                try:
+                    if self._page.query_selector(selector):
+                        has_no_results = True
+                        break
+                except:
+                    continue
+
+            if has_no_results:
+                # Try again with just the song name
+                print(f"  ⟳ No results with artist, trying just song name...")
+                self._page.goto(f"https://music.apple.com/search?term={urllib.parse.quote(song_name)}",
+                              wait_until="load")
+                time.sleep(3)
+
+                # Check again for no results
+                for selector in no_results_selectors:
+                    try:
+                        if self._page.query_selector(selector):
+                            print(f"  ✗ Not found: {song_name} - {artist_name}")
+                            return False
+                    except:
+                        continue
+
+            # Look for song results with timeout
             result_found = False
             result_selectors = [
                 '[data-testid="track-lockup"]',
@@ -611,15 +644,17 @@ class AppleMusicWebController(MusicController):
                 '[role="row"]',
                 '.lockup--song',
                 'div[class*="song"]',
-                'div[class*="track"]'
+                'div[class*="track"]',
+                'music-card-lockup[type="song"]'
             ]
 
             result_element = None
             for selector in result_selectors:
                 try:
-                    elements = self._page.query_selector_all(selector)
-                    if elements and len(elements) > 0:
-                        result_element = elements[0]
+                    # Use wait_for_selector with short timeout instead of query_selector_all
+                    elem = self._page.wait_for_selector(selector, timeout=5000)
+                    if elem:
+                        result_element = elem
                         result_found = True
                         break
                 except:
