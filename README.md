@@ -2,177 +2,149 @@
 
 Automatically create Apple Music playlists from setlist.fm concert setlists.
 
-**Cross-platform support:** Works on macOS, Windows, and Linux!
-
-## Features
-
-- Fetch setlist data from any setlist.fm URL
-- **Cross-platform support:**
-  - **macOS**: Automatically create playlists via AppleScript
-  - **Windows**: Automatically create playlists via COM (iTunes/Apple Music)
-  - **Linux/Other**: Export M3U playlists for manual import
-- Search and add songs to the playlist
-- Support for cover songs (uses the original artist)
-- M3U export option for all platforms
-- Detailed progress reporting
-
-## Requirements
-
-- Python 3.7 or higher
-- Apple Music or iTunes (for automatic playlist creation)
-- setlist.fm API key (free)
-
-### Platform-Specific Requirements
-
-- **macOS**: Apple Music app (uses AppleScript)
-- **Windows**: iTunes or Apple Music for Windows (uses COM interface)
-- **Linux/Other**: Any music player that supports M3U playlists
-
-## Installation
-
-### Windows Users - Quick Start
-
-**Option 1: Automated Setup (Recommended)**
-1. Download this repository
-2. Double-click `setup.bat` to install dependencies automatically
-3. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for detailed instructions
-
-**Option 2: Manual Setup**
-```powershell
-# Navigate to the folder
-cd setlist-apple
-
-# Install dependencies
-python -m pip install -r requirements.txt
-
-# If 'python' doesn't work, try:
-py -m pip install -r requirements.txt
-```
-
-### macOS/Linux Users
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/setlist-apple.git
-cd setlist-apple
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Get API Key
-
-1. Get a setlist.fm API key:
-   - Go to https://www.setlist.fm/settings/api
-   - Sign in or create an account
-   - Request an API key (it's free!)
-
-2. Set your API key as an environment variable:
-
-   **macOS/Linux:**
-   ```bash
-   export SETLISTFM_API_KEY='your-api-key-here'
-   ```
-
-   Or add it to your `~/.zshrc` or `~/.bash_profile`:
-   ```bash
-   echo 'export SETLISTFM_API_KEY="your-api-key-here"' >> ~/.zshrc
-   ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   $env:SETLISTFM_API_KEY='your-api-key-here'
-   ```
-
-   Or set it permanently via System Properties > Environment Variables
-
-## Usage
-
-Basic usage:
-```bash
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html"
-```
-
-With custom playlist name:
-```bash
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html" --playlist-name "My Custom Playlist"
-```
-
-With API key as argument:
-```bash
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html" --api-key "your-api-key"
-```
-
-Export to M3U file (for manual import):
-```bash
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/year/venue-id.html" --export-only --output "my_playlist.m3u"
-```
-
-### Example
-
-```bash
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/taylor-swift/2024/madison-square-garden-new-york-ny-12345678.html"
-```
-
-This will:
-1. Fetch the setlist from setlist.fm
-2. Create a playlist named "Taylor Swift - Madison Square Garden - 2024-XX-XX"
-3. Search Apple Music for each song
-4. Add found songs to the playlist
+Works on **Windows, macOS, and Linux** via the official Apple Music REST API.
 
 ## How It Works
 
-1. **Fetch**: The script uses the setlist.fm API to retrieve setlist data
-2. **Parse**: Extracts song names and artist information (including cover songs)
-3. **Create**: Creates a new playlist using the appropriate method:
-   - **macOS**: AppleScript automation
-   - **Windows**: COM interface (iTunes/Apple Music)
-   - **Other/Fallback**: M3U file export
-4. **Search**: Searches Apple Music's library for each song
-5. **Add**: Adds found songs to the playlist
+1. Fetches the setlist from setlist.fm using their API
+2. Authenticates with Apple Music (one-time browser login, token cached after)
+3. Searches the Apple Music catalog for each song
+4. Creates the playlist and adds the songs automatically
 
-## Notes
+## Controller Priority
 
-- The script searches your Apple Music library and the Apple Music catalog
-- Songs not found in Apple Music will be skipped (you'll see which ones)
-- For best results, make sure you have an Apple Music subscription
-- The playlist name defaults to: "Artist - Venue - Date"
-- Cover songs will search for the original artist's version
+The script picks the best available method automatically:
+
+| Priority | Method | Platform | Requires |
+|----------|--------|----------|---------|
+| 1 | **Apple Music REST API** | All platforms | Apple Developer credentials (one-time setup) |
+| 2 | **AppleScript** | macOS only | Apple Music app |
+| 3 | **COM interface** | Windows only | iTunes or Apple Music for Windows |
+| 4 | **M3U export** | Any | Nothing — manual import |
+
+## Installation
+
+```powershell
+# Windows
+python -m pip install -r requirements.txt
+
+# macOS / Linux
+pip install -r requirements.txt
+```
+
+> **Windows users:** If `python` is not recognised, download Python from
+> https://www.python.org/downloads/ — check **"Add Python to PATH"** during install,
+> then restart PowerShell. See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for details.
+
+## Setup
+
+### 1. setlist.fm API Key (required)
+
+Get a free key at https://www.setlist.fm/settings/api
+
+```powershell
+# Windows PowerShell (current session)
+$env:SETLISTFM_API_KEY='your-key'
+
+# Windows — set permanently
+[System.Environment]::SetEnvironmentVariable('SETLISTFM_API_KEY','your-key','User')
+```
+
+```bash
+# macOS / Linux
+export SETLISTFM_API_KEY='your-key'
+```
+
+---
+
+### 2. Apple Music API Credentials (recommended — works on all platforms)
+
+This is a one-time setup that takes about 10 minutes.
+
+**Step 1 — Create a MusicKit key**
+
+1. Sign in at https://developer.apple.com/account *(free account works)*
+2. Go to **Certificates, IDs & Profiles → Keys**
+3. Click **+** to create a new key
+4. Name it anything (e.g. "Setlist Playlist"), enable **MusicKit**
+5. Click **Continue → Register → Download** — save the `.p8` file somewhere safe
+6. Note the **Key ID** shown on the download page
+
+**Step 2 — Find your Team ID**
+
+Your Team ID is shown in the top-right corner of your Apple Developer account page
+(e.g. `ABC123DEFG`).
+
+**Step 3 — Set environment variables**
+
+```powershell
+# Windows PowerShell (current session)
+$env:APPLE_TEAM_ID='XXXXXXXXXX'
+$env:APPLE_KEY_ID='XXXXXXXXXX'
+$env:APPLE_PRIVATE_KEY='C:\Users\you\AuthKey_XXXXXXXXXX.p8'
+
+# Windows — set permanently
+[System.Environment]::SetEnvironmentVariable('APPLE_TEAM_ID','XXXXXXXXXX','User')
+[System.Environment]::SetEnvironmentVariable('APPLE_KEY_ID','XXXXXXXXXX','User')
+[System.Environment]::SetEnvironmentVariable('APPLE_PRIVATE_KEY','C:\path\to\key.p8','User')
+```
+
+```bash
+# macOS / Linux
+export APPLE_TEAM_ID='XXXXXXXXXX'
+export APPLE_KEY_ID='XXXXXXXXXX'
+export APPLE_PRIVATE_KEY='/path/to/AuthKey_XXXXXXXXXX.p8'
+```
+
+---
+
+## Usage
+
+```powershell
+# Basic — creates playlist in Apple Music
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
+
+# Custom playlist name
+python setlist_to_playlist.py "URL" --playlist-name "My Playlist"
+
+# Export M3U file only (no Apple Music account needed)
+python setlist_to_playlist.py "URL" --export-only --output my_playlist.m3u
+
+# Clear cached user token and re-authorize
+python setlist_to_playlist.py "URL" --re-auth
+```
+
+**First run with Apple Music API:** A browser window will open asking you to sign in to
+Apple Music and grant access. After that, the token is cached at `~/.setlist_apple_user_token`
+and you won't be asked again (token lasts ~6 months).
 
 ## Troubleshooting
 
-**"Error: setlist.fm API key required"**
-- Make sure you've set the `SETLISTFM_API_KEY` environment variable
-- Or pass the API key using the `--api-key` flag
+**`python` / `pip` not recognised (Windows)**
+- Reinstall Python and tick **"Add Python to PATH"**
+- Use `python -m pip` instead of `pip`
 
-**Windows: "pywin32 package required"**
-- Install pywin32: `pip install pywin32`
-- Or reinstall all requirements: `pip install -r requirements.txt`
+**`No module named 'jwt'`**
+```powershell
+python -m pip install PyJWT cryptography
+```
 
-**Windows: "Could not connect to Apple Music/iTunes"**
-- Make sure iTunes or Apple Music for Windows is installed
-- Try launching the application manually first
-- If issues persist, use `--export-only` to create an M3U file instead
+**Apple Music API — `401 Unauthorized`**
+- Your cached user token may have expired. Run with `--re-auth` to re-authorize.
+- Double-check `APPLE_TEAM_ID`, `APPLE_KEY_ID`, and `APPLE_PRIVATE_KEY` are set correctly.
 
-**macOS: "AppleScript error"**
-- Make sure Apple Music is installed and accessible
-- Grant Terminal/your IDE permission to control Apple Music (System Settings > Privacy & Security > Automation)
-- Try running Apple Music manually first
+**Apple Music API — `invalid_client` in browser**
+- Make sure MusicKit is enabled on the key in your Apple Developer account.
+- Regenerate the key if needed.
 
-**"Songs not found"**
-- Some songs may not be available in Apple Music
-- Song names from setlist.fm might not exactly match Apple Music's catalog
-- Try searching manually in Apple Music to verify availability
+**Windows COM — `Invalid class string`**
+- Apple Music for Windows does not expose a COM interface.
+- Set up Apple Music API credentials (see above) for full Windows support.
 
-**Platform not supported / Automatic fallback to M3U**
-- The script will automatically export an M3U file
-- Import it manually: Apple Music > File > Library > Import Playlist
-- You can also force M3U export with the `--export-only` flag
+**Songs not found**
+- The song may not be available in your region's Apple Music catalog.
+- The setlist.fm name may differ from the Apple Music title (e.g. live edits, alternate titles).
 
 ## License
 
 See LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
