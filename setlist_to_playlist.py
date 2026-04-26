@@ -794,6 +794,40 @@ class M3UExporter:
 
 
 # ---------------------------------------------------------------------------
+# iOS Shortcuts exporter
+# ---------------------------------------------------------------------------
+
+class iOSShortcutsExporter:
+    @staticmethod
+    def export(playlist_name: str, songs: List[Dict[str, str]], output_path: Optional[str] = None) -> str:
+        """
+        Export playlist in iOS Shortcuts-friendly JSON format.
+        Returns the path to the created file.
+        """
+        if output_path is None:
+            safe = "".join(c for c in playlist_name if c.isalnum() or c in " -_").strip()
+            output_path = f"{safe}.json"
+
+        data = {
+            "playlist_name": playlist_name,
+            "song_count": len(songs),
+            "songs": [
+                {
+                    "title": song["name"],
+                    "artist": song["artist"],
+                    "search_query": f"{song['name']} {song['artist']}"
+                }
+                for song in songs
+            ]
+        }
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        return output_path
+
+
+# ---------------------------------------------------------------------------
 # Controller selection
 # ---------------------------------------------------------------------------
 
@@ -882,10 +916,16 @@ Web automation (free, works on Windows/macOS/Linux):
   (Opens a browser, automates music.apple.com — no API keys needed)
   First run: log in once, session is saved for future runs
 
+iOS Shortcuts (recommended for Windows users):
+  %(prog)s "URL" --ios
+  (Exports JSON for iPhone/iPad Shortcuts automation)
+  Creates playlist on iOS, syncs to Windows via iCloud
+
 Examples:
   %(prog)s "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
   %(prog)s "URL" --use-web --playlist-name "My Playlist"
   %(prog)s "URL" --export-only --output playlist.m3u
+  %(prog)s "URL" --ios --output myplaylist.json
   %(prog)s "URL" --re-auth   (clear cached user token and re-authorize)
         """
     )
@@ -895,7 +935,9 @@ Examples:
     parser.add_argument("--playlist-name", help="Override playlist name")
     parser.add_argument("--export-only", action="store_true",
                         help="Export M3U file only, don't create playlist in Apple Music")
-    parser.add_argument("--output", help="Output path for M3U file")
+    parser.add_argument("--ios", action="store_true",
+                        help="Export for iOS Shortcuts automation (creates JSON file)")
+    parser.add_argument("--output", help="Output path for M3U or JSON file")
     parser.add_argument("--re-auth", action="store_true",
                         help="Clear cached Apple Music user token and re-authorize")
     parser.add_argument("--use-web", action="store_true",
@@ -953,6 +995,47 @@ Examples:
     print(f"Date:     {event_date}")
     print(f"Songs:    {len(songs)}")
     print(f"Playlist: {playlist_name}\n")
+
+    # --- iOS Shortcuts export ---
+    if args.ios:
+        path = iOSShortcutsExporter.export(playlist_name, songs, args.output)
+        print(f"\n{'='*50}")
+        print("iOS Shortcuts JSON exported!")
+        print(f"{'='*50}")
+        print(f"File:  {path}")
+        print(f"Songs: {len(songs)}")
+        print(f"\nNext steps:")
+        print(f"1. AirDrop or copy '{path}' to your iPhone/iPad")
+        print(f"2. Install the Apple Shortcut (see instructions below)")
+        print(f"3. Run the Shortcut and select this JSON file")
+        print(f"4. Playlist will be created and synced to your Windows via iCloud")
+        print(f"\n{'='*50}")
+        print(f"APPLE SHORTCUT SETUP")
+        print(f"{'='*50}")
+        print(f"1. On your iPhone, open the Shortcuts app")
+        print(f"2. Tap + to create a new shortcut")
+        print(f"3. Add these actions (tap + between each):")
+        print(f"")
+        print(f"   a. 'Select File' (to pick the JSON)")
+        print(f"   b. 'Get Dictionary from Input'")
+        print(f"   c. 'Get Dictionary Value' - Key: playlist_name")
+        print(f"   d. 'Set Variable' - Name: PlaylistName")
+        print(f"   e. 'Create Playlist' - Name: PlaylistName variable")
+        print(f"   f. 'Set Variable' - Name: NewPlaylist")
+        print(f"   g. 'Get Dictionary Value' - Key: songs (from Dictionary)")
+        print(f"   h. 'Repeat with Each' (loops through songs)")
+        print(f"      Inside the repeat:")
+        print(f"      - 'Get Dictionary Value' - Key: search_query")
+        print(f"      - 'Search Apple Music' - Search term: (result from above)")
+        print(f"      - 'Get Item from List' - First Item")
+        print(f"      - 'Add to Playlist' - Playlist: NewPlaylist variable")
+        print(f"   i. 'Show Notification' - Text: 'Playlist created!'")
+        print(f"")
+        print(f"4. Name the shortcut 'Create Playlist from JSON'")
+        print(f"5. Run it and select your JSON file!")
+        print(f"\nOr download a pre-made shortcut:")
+        print(f"https://www.icloud.com/shortcuts/ (search for playlist creators)")
+        return
 
     # --- Get controller ---
     controller = get_controller(args)
