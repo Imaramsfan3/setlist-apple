@@ -518,22 +518,29 @@ class AppleMusicWindowsUIController(MusicController):
         time.sleep(1)
 
     def create_playlist(self, name: str) -> None:
-        """Create a new playlist using File menu or keyboard shortcut"""
+        """Create a new playlist using File menu"""
         self._launch_or_connect()
         self._playlist_name = name
 
         print(f"Creating playlist: {name}")
+        print("  → Opening File menu...")
 
         try:
-            # Use keyboard shortcut: Ctrl+N (new playlist)
             self._main_window.set_focus()
             time.sleep(0.5)
 
-            # Try Ctrl+N for new playlist
-            self.keyboard.send_keys('^n')  # Ctrl+N
-            time.sleep(2)
+            # Use File menu: Alt, F, N, P (File > New > Playlist)
+            self.keyboard.send_keys('%')  # Alt (opens menu bar)
+            time.sleep(0.3)
+            self.keyboard.send_keys('f')  # File
+            time.sleep(0.3)
+            self.keyboard.send_keys('n')  # New
+            time.sleep(0.3)
+            self.keyboard.send_keys('p')  # Playlist
+            time.sleep(1)
 
-            # Type the playlist name
+            # A dialog or input should appear for the playlist name
+            # Type the name
             self.keyboard.send_keys(name, with_spaces=True)
             time.sleep(0.5)
 
@@ -541,7 +548,7 @@ class AppleMusicWindowsUIController(MusicController):
             self.keyboard.send_keys('{ENTER}')
             time.sleep(1)
 
-            print(f"✓ Created playlist: {name}")
+            print(f"  ✓ Created playlist: {name}")
 
         except Exception as e:
             raise RuntimeError(f"Failed to create playlist: {e}")
@@ -552,47 +559,67 @@ class AppleMusicWindowsUIController(MusicController):
             self._main_window.set_focus()
             time.sleep(0.3)
 
-            # Focus search box (Ctrl+F or Ctrl+E)
+            # Focus search box (Ctrl+F)
             self.keyboard.send_keys('^f')  # Ctrl+F for search
             time.sleep(0.5)
 
-            # Type search query
+            # Clear any existing text in search box
+            self.keyboard.send_keys('^a')  # Ctrl+A to select all
+            time.sleep(0.2)
+
+            # Type search query (this replaces the selected text)
             query = f"{song_name} {artist_name}"
             self.keyboard.send_keys(query, with_spaces=True)
             time.sleep(0.5)
 
             # Press Enter to search
             self.keyboard.send_keys('{ENTER}')
-            time.sleep(2)  # Wait for search results
+            time.sleep(2.5)  # Wait for search results to load
 
-            # Try to select first result
-            # Tab to results, then use arrow keys
-            self.keyboard.send_keys('{TAB}')
+            # Escape out of search box to get to results
+            self.keyboard.send_keys('{ESC}')
             time.sleep(0.3)
+
+            # Tab to results area
+            self.keyboard.send_keys('{TAB}')
+            time.sleep(0.5)
+
+            # Select first song (should already be highlighted, but ensure it)
             self.keyboard.send_keys('{DOWN}')
             time.sleep(0.3)
 
-            # Right-click to open context menu
-            self.keyboard.send_keys('+{F10}')  # Shift+F10 = right-click
+            # Right-click using keyboard (Applications/Menu key or Shift+F10)
+            self.keyboard.send_keys('+{F10}')  # Shift+F10 = context menu
+            time.sleep(1)
+
+            # Press 'A' for "Add to Playlist"
+            self.keyboard.send_keys('a')
+            time.sleep(0.8)
+
+            # Now we should be in the "Add to Playlist" submenu
+            # Type the playlist name to search for it
+            # Most apps let you type to search in menus
+            for char in playlist_name[:20]:  # Limit to first 20 chars
+                self.keyboard.send_keys(char)
+                time.sleep(0.05)
+
             time.sleep(0.5)
 
-            # Type "Add to Playlist"
-            self.keyboard.send_keys('a')  # First letter might select "Add to Playlist"
-            time.sleep(0.5)
-
-            # Find our playlist name in submenu
-            # This is tricky - we might need to use arrow keys
-            # For now, just try typing the playlist name
-            self.keyboard.send_keys(playlist_name[0])  # First letter of playlist
-            time.sleep(0.5)
+            # Press Enter to select the playlist
             self.keyboard.send_keys('{ENTER}')
-            time.sleep(0.5)
+            time.sleep(0.8)
 
             print(f"  ✓ Added: {song_name} - {artist_name}")
             return True
 
         except Exception as e:
             print(f"  ✗ Error adding {song_name}: {e}")
+            # Try to close any open menus
+            try:
+                self.keyboard.send_keys('{ESC}')
+                self.keyboard.send_keys('{ESC}')
+            except:
+                pass
             return False
 
 
