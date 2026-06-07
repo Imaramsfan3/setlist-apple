@@ -518,33 +518,72 @@ class AppleMusicWindowsUIController(MusicController):
         time.sleep(1)
 
     def create_playlist(self, name: str) -> None:
-        """Create a new playlist using File menu"""
+        """Create a new playlist by clicking UI elements"""
         self._launch_or_connect()
         self._playlist_name = name
 
         print(f"Creating playlist: {name}")
-        print("  → Opening File menu...")
 
         try:
             self._main_window.set_focus()
             time.sleep(0.5)
 
-            # Use File menu: Alt, F, N, P (File > New > Playlist)
-            self.keyboard.send_keys('%')  # Alt (opens menu bar)
-            time.sleep(0.3)
-            self.keyboard.send_keys('f')  # File
-            time.sleep(0.3)
-            self.keyboard.send_keys('n')  # New
-            time.sleep(0.3)
-            self.keyboard.send_keys('p')  # Playlist
-            time.sleep(1)
+            # Step 1: Click "Playlists" in sidebar
+            print("  → Clicking 'Playlists'...")
+            try:
+                # Try to find Playlists button/link
+                playlists_btn = self._main_window.child_window(title="Playlists", control_type="Button")
+                playlists_btn.click_input()
+                time.sleep(0.8)
+            except Exception as e:
+                # Try alternative search
+                try:
+                    playlists_btn = self._main_window.child_window(title_re=".*Playlists.*", control_type="ListItem")
+                    playlists_btn.click_input()
+                    time.sleep(0.8)
+                except:
+                    print(f"  → Could not find Playlists button, trying keyboard navigation...")
+                    # Fallback: use keyboard to navigate to Playlists
+                    self.keyboard.send_keys('^+p')  # Ctrl+Shift+P might work
+                    time.sleep(0.8)
 
-            # A dialog or input should appear for the playlist name
-            # Type the name
-            self.keyboard.send_keys(name, with_spaces=True)
+            # Step 2: Click the "+" button
+            print("  → Clicking '+' button...")
+            try:
+                plus_btn = self._main_window.child_window(title="+", control_type="Button")
+                plus_btn.click_input()
+                time.sleep(0.8)
+            except Exception as e:
+                # Try finding by automation_id or class
+                try:
+                    plus_btn = self._main_window.child_window(title="Add", control_type="Button")
+                    plus_btn.click_input()
+                    time.sleep(0.8)
+                except:
+                    print(f"  → Could not find + button: {e}")
+                    raise RuntimeError("Could not find + button to create playlist")
+
+            # Step 3: Click "New Playlist" from the menu
+            print("  → Clicking 'New Playlist'...")
+            try:
+                new_playlist_item = self._main_window.child_window(title="New Playlist", control_type="MenuItem")
+                new_playlist_item.click_input()
+                time.sleep(1)
+            except:
+                # Try as a list item or button
+                try:
+                    new_playlist_item = self._main_window.child_window(title_re=".*New Playlist.*")
+                    new_playlist_item.click_input()
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"  → Could not find 'New Playlist' option: {e}")
+                    raise RuntimeError("Could not find 'New Playlist' menu item")
+
+            # Step 4: Enter the playlist name
+            print("  → Entering playlist name...")
             time.sleep(0.5)
-
-            # Press Enter to confirm
+            self.keyboard.send_keys(name, with_spaces=True)
+            time.sleep(0.3)
             self.keyboard.send_keys('{ENTER}')
             time.sleep(1)
 
@@ -559,7 +598,7 @@ class AppleMusicWindowsUIController(MusicController):
             self._main_window.set_focus()
             time.sleep(0.3)
 
-            # Focus search box (Ctrl+F)
+            # Step 1: Search for the song
             self.keyboard.send_keys('^f')  # Ctrl+F for search
             time.sleep(0.5)
 
@@ -567,7 +606,7 @@ class AppleMusicWindowsUIController(MusicController):
             self.keyboard.send_keys('^a')  # Ctrl+A to select all
             time.sleep(0.2)
 
-            # Type search query (this replaces the selected text)
+            # Type search query
             query = f"{song_name} {artist_name}"
             self.keyboard.send_keys(query, with_spaces=True)
             time.sleep(0.5)
@@ -576,38 +615,80 @@ class AppleMusicWindowsUIController(MusicController):
             self.keyboard.send_keys('{ENTER}')
             time.sleep(2.5)  # Wait for search results to load
 
-            # Escape out of search box to get to results
-            self.keyboard.send_keys('{ESC}')
-            time.sleep(0.3)
+            # Step 2: Find and right-click the first song result
+            try:
+                # Try to find the first song in results
+                # Songs are typically ListItem or DataItem controls
+                song_item = None
 
-            # Tab to results area
-            self.keyboard.send_keys('{TAB}')
-            time.sleep(0.5)
+                # Try multiple approaches to find the first result
+                for control_type in ["ListItem", "DataItem", "TreeItem"]:
+                    try:
+                        # Look for items that might contain the song name or artist
+                        items = self._main_window.descendants(control_type=control_type)
+                        if items and len(items) > 0:
+                            # Get the first few items and try to find one that looks like a song
+                            for item in items[:10]:
+                                song_item = item
+                                break
+                            if song_item:
+                                break
+                    except:
+                        continue
 
-            # Select first song (should already be highlighted, but ensure it)
-            self.keyboard.send_keys('{DOWN}')
-            time.sleep(0.3)
+                if song_item:
+                    # Right-click the song
+                    song_item.click_input(button='right')
+                    time.sleep(1)
+                else:
+                    # Fallback: use keyboard navigation
+                    print("  → Using keyboard fallback for song selection...")
+                    self.keyboard.send_keys('{ESC}')  # Exit search box
+                    time.sleep(0.3)
+                    self.keyboard.send_keys('{TAB}')  # Tab to results
+                    time.sleep(0.3)
+                    self.keyboard.send_keys('{DOWN}')  # Select first result
+                    time.sleep(0.3)
+                    self.keyboard.send_keys('+{F10}')  # Right-click menu
+                    time.sleep(1)
 
-            # Right-click using keyboard (Applications/Menu key or Shift+F10)
-            self.keyboard.send_keys('+{F10}')  # Shift+F10 = context menu
-            time.sleep(1)
+            except Exception as e:
+                print(f"  → Error finding song item, using keyboard: {e}")
+                # Fallback: keyboard navigation
+                self.keyboard.send_keys('{ESC}')
+                time.sleep(0.3)
+                self.keyboard.send_keys('{TAB}')
+                time.sleep(0.3)
+                self.keyboard.send_keys('{DOWN}')
+                time.sleep(0.3)
+                self.keyboard.send_keys('+{F10}')
+                time.sleep(1)
 
-            # Press 'A' for "Add to Playlist"
-            self.keyboard.send_keys('a')
-            time.sleep(0.8)
+            # Step 3: Click "Add to Playlist" in context menu
+            try:
+                add_to_playlist = self._main_window.child_window(title="Add to Playlist", control_type="MenuItem")
+                add_to_playlist.click_input()
+                time.sleep(0.8)
+            except:
+                # Fallback: use keyboard
+                print("  → Using keyboard for 'Add to Playlist'...")
+                self.keyboard.send_keys('a')  # Press 'A' for Add to Playlist
+                time.sleep(0.8)
 
-            # Now we should be in the "Add to Playlist" submenu
-            # Type the playlist name to search for it
-            # Most apps let you type to search in menus
-            for char in playlist_name[:20]:  # Limit to first 20 chars
-                self.keyboard.send_keys(char)
-                time.sleep(0.05)
-
-            time.sleep(0.5)
-
-            # Press Enter to select the playlist
-            self.keyboard.send_keys('{ENTER}')
-            time.sleep(0.8)
+            # Step 4: Click the playlist name in submenu
+            try:
+                playlist_item = self._main_window.child_window(title=playlist_name, control_type="MenuItem")
+                playlist_item.click_input()
+                time.sleep(0.8)
+            except:
+                # Fallback: type the playlist name
+                print("  → Using keyboard for playlist selection...")
+                for char in playlist_name[:20]:
+                    self.keyboard.send_keys(char)
+                    time.sleep(0.05)
+                time.sleep(0.3)
+                self.keyboard.send_keys('{ENTER}')
+                time.sleep(0.8)
 
             print(f"  ✓ Added: {song_name} - {artist_name}")
             return True
