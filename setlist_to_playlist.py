@@ -523,45 +523,99 @@ class AppleMusicWindowsUIController(MusicController):
         self._playlist_name = name
 
         print(f"Creating playlist: {name}")
+        print("\n  TIP: If this fails, you can manually:")
+        print("       1. Click 'Playlists' in the sidebar")
+        print("       2. Click the '+' button")
+        print("       3. Click 'New Playlist'")
+        print("       4. Keep this window open and the script will continue\n")
 
         try:
             self._main_window.set_focus()
             time.sleep(0.5)
 
-            # Step 1: Click "Playlists" in sidebar
-            print("  → Clicking 'Playlists'...")
+            # Step 1: Click "Playlists" in sidebar to ensure it's selected/expanded
+            print("  → Clicking 'Playlists' in sidebar...")
             try:
-                # Try to find Playlists button/link
-                playlists_btn = self._main_window.child_window(title="Playlists", control_type="Button")
-                playlists_btn.click_input()
-                time.sleep(0.8)
-            except Exception as e:
-                # Try alternative search
-                try:
-                    playlists_btn = self._main_window.child_window(title_re=".*Playlists.*", control_type="ListItem")
-                    playlists_btn.click_input()
-                    time.sleep(0.8)
-                except:
-                    print(f"  → Could not find Playlists button, trying keyboard navigation...")
-                    # Fallback: use keyboard to navigate to Playlists
-                    self.keyboard.send_keys('^+p')  # Ctrl+Shift+P might work
-                    time.sleep(0.8)
+                # Try different control types for the Playlists item in sidebar
+                playlists_item = None
+                for control_type in ["TreeItem", "ListItem", "Text", "Button"]:
+                    try:
+                        playlists_item = self._main_window.child_window(title="Playlists", control_type=control_type)
+                        if playlists_item.exists():
+                            playlists_item.click_input()
+                            time.sleep(0.8)
+                            print(f"    Found as {control_type}")
+                            break
+                    except:
+                        continue
 
-            # Step 2: Click the "+" button
-            print("  → Clicking '+' button...")
-            try:
-                plus_btn = self._main_window.child_window(title="+", control_type="Button")
-                plus_btn.click_input()
-                time.sleep(0.8)
+                if not playlists_item or not playlists_item.exists():
+                    print(f"  → Could not find Playlists item, continuing anyway...")
+                    time.sleep(0.5)
+
             except Exception as e:
-                # Try finding by automation_id or class
-                try:
-                    plus_btn = self._main_window.child_window(title="Add", control_type="Button")
-                    plus_btn.click_input()
-                    time.sleep(0.8)
-                except:
-                    print(f"  → Could not find + button: {e}")
-                    raise RuntimeError("Could not find + button to create playlist")
+                print(f"  → Error clicking Playlists: {e}, continuing anyway...")
+                time.sleep(0.5)
+
+            # Step 2: Click the "+" button next to Playlists
+            print("  → Clicking '+' button next to Playlists...")
+            plus_clicked = False
+            try:
+                # Try to find + button near Playlists
+                for title in ["+", "Add", "New Playlist", "Create Playlist"]:
+                    try:
+                        plus_btn = self._main_window.child_window(title=title, control_type="Button")
+                        if plus_btn.exists():
+                            plus_btn.click_input()
+                            time.sleep(0.8)
+                            print(f"    Found button: {title}")
+                            plus_clicked = True
+                            break
+                    except:
+                        continue
+
+                if not plus_clicked:
+                    # Try to find any button near "Playlists" text
+                    print("  → Searching for buttons near Playlists...")
+                    buttons = self._main_window.descendants(control_type="Button")
+                    for btn in buttons:
+                        try:
+                            btn_text = btn.window_text()
+                            # Look for + or similar symbols
+                            if btn_text in ["+", "＋", "Add"]:
+                                btn.click_input()
+                                time.sleep(0.8)
+                                print(f"    Found button with text: {btn_text}")
+                                plus_clicked = True
+                                break
+                        except:
+                            continue
+
+                if not plus_clicked:
+                    print(f"  → Could not find + button automatically")
+                    print(f"\n  MANUAL STEP REQUIRED:")
+                    print(f"  Please manually create a playlist named: {name}")
+                    print(f"    1. Click 'Playlists' in the left sidebar")
+                    print(f"    2. Click the '+' button next to it")
+                    print(f"    3. Click 'New Playlist'")
+                    print(f"    4. Name it: {name}")
+                    print(f"    5. Press Enter here when done...")
+                    input(f"\n  Press Enter after creating playlist '{name}': ")
+                    print(f"  ✓ Continuing with manual playlist...")
+                    return
+
+            except Exception as e:
+                print(f"  → Error finding + button: {e}")
+                print(f"\n  MANUAL STEP REQUIRED:")
+                print(f"  Please manually create a playlist named: {name}")
+                print(f"    1. Click 'Playlists' in the left sidebar")
+                print(f"    2. Click the '+' button next to it")
+                print(f"    3. Click 'New Playlist'")
+                print(f"    4. Name it: {name}")
+                print(f"    5. Press Enter here when done...")
+                input(f"\n  Press Enter after creating playlist '{name}': ")
+                print(f"  ✓ Continuing with manual playlist...")
+                return
 
             # Step 3: Click "New Playlist" from the menu
             print("  → Clicking 'New Playlist'...")
