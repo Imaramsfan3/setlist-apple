@@ -104,7 +104,39 @@ python setlist_to_playlist.py "URL" --use-web
 
 ---
 
-### Method 2: M3U Export (Manual Import)
+### Method 2: Windows UI Automation (Windows Only — Direct App Control)
+
+```powershell
+python setlist_to_playlist.py "URL" --use-windows-ui
+```
+
+**Pros:**
+- ✅ Free — no paid accounts needed
+- ✅ Automates the Apple Music desktop app directly
+- ✅ Creates playlists and adds songs automatically
+- ✅ No browser needed
+
+**Cons:**
+- ❌ Windows only
+- ❌ Requires Apple Music app to be installed
+- ❌ May be fragile if Apple updates the UI
+
+**How it works:**
+- Launches or connects to Apple Music Windows app
+- Uses keyboard shortcuts and UI automation
+- Creates playlist and searches for songs
+- Adds songs to playlist automatically
+
+**Requirements:**
+```powershell
+python -m pip install pywinauto
+```
+
+**Note:** This method automates the Apple Music app using keyboard/mouse automation. It may require the app window to be visible and can be affected by UI changes.
+
+---
+
+### Method 3: M3U Export (Manual Import)
 
 ```powershell
 python setlist_to_playlist.py "URL" --export-only
@@ -119,7 +151,7 @@ Creates an `.m3u` playlist file.
 
 ---
 
-### Method 3: Apple Music REST API (Advanced)
+### Method 4: Apple Music REST API (Advanced)
 
 Requires Apple Developer credentials (£79/year — only needed if you want pure API access).
 
@@ -157,6 +189,9 @@ python setlist_to_playlist.py "https://www.setlist.fm/setlist/artist/2024/venue-
 # Custom playlist name
 python setlist_to_playlist.py "URL" --use-web --playlist-name "My Concert 2024"
 
+# Windows UI automation (Windows only)
+python setlist_to_playlist.py "URL" --use-windows-ui
+
 # M3U export only
 python setlist_to_playlist.py "URL" --export-only --output my_playlist.m3u
 
@@ -174,11 +209,12 @@ The script picks the best method automatically:
 |----------|--------|----------|-------|-------|
 | 1 | **Apple Music API** | All | No (£79/year) | Apple Developer account |
 | 2 | **Web automation** (`--use-web`) | All | ✅ Yes | One-time browser login |
+| 2b | **Windows UI automation** (`--use-windows-ui`) | Windows only | ✅ Yes | `pip install pywinauto` |
 | 3 | **AppleScript** | macOS only | ✅ Yes | None |
 | 4 | **COM** | Windows (rarely works) | ✅ Yes | iTunes installed |
 | 5 | **M3U export** | All | ✅ Yes | Manual import |
 
-**For Windows:** Use `--use-web` (web automation). COM doesn't work with Apple Music for Windows.
+**For Windows:** Use `--use-windows-ui` (automates Apple Music app) or `--ios` (for iPhone Shortcuts). COM doesn't work with Apple Music for Windows.
 
 ---
 

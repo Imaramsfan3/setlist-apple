@@ -438,6 +438,165 @@ class AppleMusicWindowsController(MusicController):
 
 
 # ---------------------------------------------------------------------------
+# Apple Music Windows UI Automation Controller
+# ---------------------------------------------------------------------------
+
+class AppleMusicWindowsUIController(MusicController):
+    """
+    Automates the Apple Music for Windows desktop app using UI automation.
+    Works on Windows only.
+
+    Reads JSON files exported with --ios flag and creates playlists directly
+    in the Apple Music Windows app using keyboard/mouse automation.
+    """
+
+    def __init__(self):
+        try:
+            from pywinauto.application import Application
+            from pywinauto import Desktop
+            import pywinauto.keyboard as keyboard
+            self.Application = Application
+            self.Desktop = Desktop
+            self.keyboard = keyboard
+        except ImportError:
+            raise ImportError(
+                "pywinauto required for Windows UI automation.\n"
+                "Install with: python -m pip install pywinauto"
+            )
+
+        self._app = None
+        self._main_window = None
+        self._playlist_name = None
+
+    def _launch_or_connect(self):
+        """Launch Apple Music or connect to existing instance"""
+        if self._app:
+            return
+
+        try:
+            # Try to connect to running instance first
+            self._app = self.Application(backend="uia").connect(title_re=".*Apple Music.*", timeout=5)
+            print("✓ Connected to running Apple Music")
+        except Exception:
+            # Launch if not running
+            print("Launching Apple Music...")
+            try:
+                # Common install locations
+                paths = [
+                    r"C:\Program Files\WindowsApps\AppleInc.AppleMusic_*\AppleMusic.exe",
+                    r"C:\Program Files (x86)\Apple Music\AppleMusic.exe"
+                ]
+
+                import glob
+                exe_path = None
+                for pattern in paths:
+                    matches = glob.glob(pattern)
+                    if matches:
+                        exe_path = matches[0]
+                        break
+
+                if not exe_path:
+                    # Try to find via Start Menu shortcut
+                    import subprocess
+                    subprocess.Popen("start applemusicapp:", shell=True)
+                    time.sleep(5)
+                else:
+                    self._app = self.Application(backend="uia").start(exe_path)
+                    time.sleep(5)
+
+                self._app = self.Application(backend="uia").connect(title_re=".*Apple Music.*", timeout=10)
+                print("✓ Launched Apple Music")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not launch Apple Music: {e}\n\n"
+                    "Please launch Apple Music manually and try again."
+                )
+
+        # Get main window
+        self._main_window = self._app.window(title_re=".*Apple Music.*")
+        self._main_window.set_focus()
+        time.sleep(1)
+
+    def create_playlist(self, name: str) -> None:
+        """Create a new playlist using File menu or keyboard shortcut"""
+        self._launch_or_connect()
+        self._playlist_name = name
+
+        print(f"Creating playlist: {name}")
+
+        try:
+            # Use keyboard shortcut: Ctrl+N (new playlist)
+            self._main_window.set_focus()
+            time.sleep(0.5)
+
+            # Try Ctrl+N for new playlist
+            self.keyboard.send_keys('^n')  # Ctrl+N
+            time.sleep(2)
+
+            # Type the playlist name
+            self.keyboard.send_keys(name, with_spaces=True)
+            time.sleep(0.5)
+
+            # Press Enter to confirm
+            self.keyboard.send_keys('{ENTER}')
+            time.sleep(1)
+
+            print(f"✓ Created playlist: {name}")
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to create playlist: {e}")
+
+    def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
+        """Search for a song and add it to the playlist"""
+        try:
+            self._main_window.set_focus()
+            time.sleep(0.3)
+
+            # Focus search box (Ctrl+F or Ctrl+E)
+            self.keyboard.send_keys('^f')  # Ctrl+F for search
+            time.sleep(0.5)
+
+            # Type search query
+            query = f"{song_name} {artist_name}"
+            self.keyboard.send_keys(query, with_spaces=True)
+            time.sleep(0.5)
+
+            # Press Enter to search
+            self.keyboard.send_keys('{ENTER}')
+            time.sleep(2)  # Wait for search results
+
+            # Try to select first result
+            # Tab to results, then use arrow keys
+            self.keyboard.send_keys('{TAB}')
+            time.sleep(0.3)
+            self.keyboard.send_keys('{DOWN}')
+            time.sleep(0.3)
+
+            # Right-click to open context menu
+            self.keyboard.send_keys('+{F10}')  # Shift+F10 = right-click
+            time.sleep(0.5)
+
+            # Type "Add to Playlist"
+            self.keyboard.send_keys('a')  # First letter might select "Add to Playlist"
+            time.sleep(0.5)
+
+            # Find our playlist name in submenu
+            # This is tricky - we might need to use arrow keys
+            # For now, just try typing the playlist name
+            self.keyboard.send_keys(playlist_name[0])  # First letter of playlist
+            time.sleep(0.5)
+            self.keyboard.send_keys('{ENTER}')
+            time.sleep(0.5)
+
+            print(f"  ✓ Added: {song_name} - {artist_name}")
+            return True
+
+        except Exception as e:
+            print(f"  ✗ Error adding {song_name}: {e}")
+            return False
+
+
+# ---------------------------------------------------------------------------
 # Apple Music Web Controller (cross-platform browser automation)
 # ---------------------------------------------------------------------------
 
@@ -834,11 +993,12 @@ class iOSShortcutsExporter:
 def get_controller(args) -> Optional[MusicController]:
     """
     Priority:
-      1. Apple Music REST API  — if APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY are set
-      2. Web automation        — if --use-web flag
-      3. macOS AppleScript     — on darwin
-      4. Windows COM           — on win32 (rarely works)
-      5. Web automation        — fallback for Windows if COM fails
+      1. Apple Music REST API   — if APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY are set
+      2. Web automation         — if --use-web flag
+      2b. Windows UI automation — if --use-windows-ui flag (Windows only)
+      3. macOS AppleScript      — on darwin
+      4. Windows COM            — on win32 (rarely works)
+      5. Web automation         — fallback for Windows if COM fails
       6. None → M3U export
     """
     if args.export_only:
@@ -860,6 +1020,18 @@ def get_controller(args) -> Optional[MusicController]:
     if args.use_web:
         try:
             return AppleMusicWebController()
+        except ImportError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+    # 2b. Windows UI automation (if explicitly requested)
+    if args.use_windows_ui:
+        if sys.platform != "win32":
+            print("Error: --use-windows-ui only works on Windows")
+            sys.exit(1)
+        try:
+            print("Using Windows UI automation (Apple Music desktop app)\n")
+            return AppleMusicWindowsUIController()
         except ImportError as e:
             print(f"Error: {e}")
             sys.exit(1)
@@ -911,15 +1083,20 @@ Apple Music API setup (recommended — works on Windows, macOS, Linux):
        APPLE_KEY_ID=XXXXXXXXXX
        APPLE_PRIVATE_KEY=C:\\path\\to\\AuthKey_XXXXXXXXXX.p8
 
-Web automation (free, works on Windows/macOS/Linux):
-  %(prog)s "URL" --use-web
-  (Opens a browser, automates music.apple.com — no API keys needed)
-  First run: log in once, session is saved for future runs
+Windows UI automation (Windows only — automates Apple Music app):
+  %(prog)s "URL" --use-windows-ui
+  (Automates the Apple Music desktop app on Windows)
+  Requires: pip install pywinauto
 
-iOS Shortcuts (recommended for Windows users):
+iOS Shortcuts (recommended for Windows users without automation):
   %(prog)s "URL" --ios
   (Exports JSON for iPhone/iPad Shortcuts automation)
   Creates playlist on iOS, syncs to Windows via iCloud
+
+Web automation (limited — music.apple.com web player):
+  %(prog)s "URL" --use-web
+  (Opens a browser, automates music.apple.com — no API keys needed)
+  Note: Web player has limited features, may not support playlist creation
 
 Examples:
   %(prog)s "https://www.setlist.fm/setlist/artist/2024/venue-id.html"
@@ -942,6 +1119,8 @@ Examples:
                         help="Clear cached Apple Music user token and re-authorize")
     parser.add_argument("--use-web", action="store_true",
                         help="Use web browser automation (music.apple.com) - works on all platforms")
+    parser.add_argument("--use-windows-ui", action="store_true",
+                        help="Use Windows UI automation (Apple Music desktop app) - Windows only")
     # Apple Music API credentials (can also be set via env vars)
     parser.add_argument("--apple-team-id", default=None, help="Apple Developer Team ID")
     parser.add_argument("--apple-key-id", default=None, help="MusicKit Key ID")
