@@ -415,23 +415,36 @@ class AppleMusicWindowsController(MusicController):
     def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
         try:
             app = self._get_app()
+
+            # Find the target playlist
             target = None
             for src in app.Sources:
-                if src.Kind == 1:
+                if src.Kind == 1:  # Library
                     for pl in src.Playlists:
                         if pl.Name == playlist_name:
                             target = pl
                             break
+                    if target:
+                        break
+
             if not target:
                 print(f"  ✗ Playlist not found: {playlist_name}")
                 return False
-            results = app.LibraryPlaylist.Search(f"{song_name} {artist_name}", 0)
+
+            # Search for the song in library
+            query = f"{song_name} {artist_name}"
+            results = app.LibraryPlaylist.Search(query, 0)  # 0 = search all fields
+
             if results and results.Count > 0:
-                results.Item(1).AddToPlaylist(target)
+                # Use AddTrack instead of AddToPlaylist
+                track = results.Item(1)
+                target.AddTrack(track)
                 print(f"  ✓ Added: {song_name} - {artist_name}")
                 return True
+
             print(f"  ✗ Not found: {song_name} - {artist_name}")
             return False
+
         except Exception as e:
             print(f"  ✗ Error: {song_name} ({e})")
             return False
