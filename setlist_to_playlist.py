@@ -431,16 +431,47 @@ class AppleMusicWindowsController(MusicController):
                 print(f"  ✗ Playlist not found: {playlist_name}")
                 return False
 
-            # Search for the song in library
             query = f"{song_name} {artist_name}"
-            results = app.LibraryPlaylist.Search(query, 0)  # 0 = search all fields
+
+            # Step 1: Try searching in library first
+            results = app.LibraryPlaylist.Search(query, 0)
 
             if results and results.Count > 0:
-                # Use AddTrack instead of AddToPlaylist
                 track = results.Item(1)
                 target.AddTrack(track)
                 print(f"  ✓ Added: {song_name} - {artist_name}")
                 return True
+
+            # Step 2: If not in library, try searching Apple Music Store
+            # Note: This requires Apple Music subscription
+            try:
+                # Search Apple Music Store (Source.Kind == 4)
+                store_source = None
+                for src in app.Sources:
+                    if src.Kind == 4:  # Apple Music Store
+                        store_source = src
+                        break
+
+                if store_source:
+                    # Search the store
+                    store_results = store_source.Search(query, 0)
+                    if store_results and store_results.Count > 0:
+                        # Add to library first, then to playlist
+                        store_track = store_results.Item(1)
+                        # Download/add to library (if Apple Music subscriber)
+                        store_track.AddToLibrary()
+                        time.sleep(1)  # Wait for library update
+
+                        # Now search library again
+                        lib_results = app.LibraryPlaylist.Search(query, 0)
+                        if lib_results and lib_results.Count > 0:
+                            target.AddTrack(lib_results.Item(1))
+                            print(f"  ✓ Added: {song_name} - {artist_name} (from Apple Music)")
+                            return True
+
+            except Exception as store_error:
+                # Store search failed - user might not have Apple Music subscription
+                pass
 
             print(f"  ✗ Not found: {song_name} - {artist_name}")
             return False
