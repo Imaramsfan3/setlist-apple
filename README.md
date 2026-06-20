@@ -4,23 +4,39 @@ Automatically create Apple Music playlists from setlist.fm concert setlists.
 
 Works on **Windows, macOS, and Linux**.
 
-## Quick Start (Windows Users — Easiest Method)
+## Quick Start (Windows Users — Recommended)
+
+**Option 1: iTunes (Easiest — Fully Automated)**
 
 ```powershell
-# 1. Install dependencies
+# 1. Install iTunes from https://www.apple.com/itunes/download/
+# 2. Install dependencies
 python -m pip install -r requirements.txt
-python -m playwright install chromium
 
-# 2. Get setlist.fm API key (free)
+# 3. Get setlist.fm API key (free)
 # Visit: https://www.setlist.fm/settings/api
 
-# 3. Run with web automation
+# 4. Test iTunes connection
+python test_itunes_com.py
+
+# 5. Run the script (fully automatic!)
 $env:SETLISTFM_API_KEY='your-key-here'
-python setlist_to_playlist.py "https://www.setlist.fm/setlist/..." --use-web
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/..."
 ```
 
-**First run:** A browser opens to music.apple.com — sign in once, session is saved.  
-**Subsequent runs:** Fully automatic, no login needed.
+**Fully automatic** — Creates playlist and adds all songs via iTunes COM interface.
+
+---
+
+**Option 2: iOS Shortcuts (For iPhone Users)**
+
+```powershell
+# Export JSON for iPhone
+python setlist_to_playlist.py "https://www.setlist.fm/setlist/..." --ios
+```
+
+Transfer JSON to iPhone, use Shortcuts app to create playlist (syncs back via iCloud).  
+See [iOS_SHORTCUTS_GUIDE.md](iOS_SHORTCUTS_GUIDE.md) for setup.
 
 ---
 
@@ -208,13 +224,17 @@ The script picks the best method automatically:
 | Priority | Method | Platform | Free? | Setup |
 |----------|--------|----------|-------|-------|
 | 1 | **Apple Music API** | All | No (£79/year) | Apple Developer account |
-| 2 | **Web automation** (`--use-web`) | All | ✅ Yes | One-time browser login |
-| 2b | **Windows UI automation** (`--use-windows-ui`) | Windows only | ✅ Yes | `pip install pywinauto` |
-| 3 | **AppleScript** | macOS only | ✅ Yes | None |
-| 4 | **COM** | Windows (rarely works) | ✅ Yes | iTunes installed |
-| 5 | **M3U export** | All | ✅ Yes | Manual import |
+| 2 | **iTunes COM** | Windows | ✅ Yes | iTunes installed |
+| 3 | **AppleScript** | macOS | ✅ Yes | None |
+| 4 | **Web automation** (`--use-web`) | All | ✅ Yes | One-time browser login |
+| 5 | **Windows UI automation** (`--use-windows-ui`) | Windows | ✅ Yes | `pip install pywinauto` |
+| 6 | **iOS Shortcuts** (`--ios`) | iOS/iPadOS | ✅ Yes | Manual setup |
+| 7 | **M3U export** (`--export-only`) | All | ✅ Yes | Manual import |
 
-**For Windows:** Use `--use-windows-ui` (automates Apple Music app) or `--ios` (for iPhone Shortcuts). COM doesn't work with Apple Music for Windows.
+**For Windows:** 
+- **Recommended:** Install iTunes for fully automatic playlist creation via COM interface
+- **Alternative:** Use `--ios` to export JSON for iPhone Shortcuts (syncs back via iCloud)
+- **Note:** COM doesn't work with Apple Music for Windows app (iTunes only)
 
 ---
 
