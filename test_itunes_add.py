@@ -41,6 +41,8 @@ try:
         track = results.Item(1)
         print(f"  First result: {track.Name} - {track.Artist}")
         print(f"  Track type: {type(track)}")
+        print(f"  Track Kind: {track.Kind if hasattr(track, 'Kind') else 'N/A'}")
+        print(f"  Has Location: {hasattr(track, 'Location') and track.Location is not None}")
 
         # Try different methods to add track
         print(f"\nTrying to add track to playlist...")
@@ -73,24 +75,34 @@ try:
         except Exception as e:
             print(f"  ✗ Method 3 (AddTrack with ID) failed: {e}")
 
-        # Method 4: Try using iTunes scripting
+        # Method 4: Try using AddFile with track location
         try:
-            # Create a VBScript-like approach
-            import win32com.client
-            # Force a refresh
-            test_playlist = None
-            for src in itunes.Sources:
-                if src.Kind == 1:
-                    for pl in src.Playlists:
-                        if pl.Name == test_playlist_name:
-                            test_playlist = pl
-                            break
+            location = track.Location
+            print(f"\n  Track location: {location}")
 
-            if test_playlist:
-                test_playlist.AddTrack(track)
-                print(f"  ✓ Method 4 (Refreshed playlist) worked!")
+            if location:
+                test_playlist.AddFile(location)
+                print(f"  ✓ Method 4 (AddFile) worked!")
+            else:
+                print(f"  ✗ Method 4 (AddFile) failed: No file location (might be Apple Music stream)")
         except Exception as e:
-            print(f"  ✗ Method 4 (Refreshed playlist) failed: {e}")
+            print(f"  ✗ Method 4 (AddFile) failed: {e}")
+
+        # Method 5: Try creating a new search and using those results
+        try:
+            # Search again and try with fresh results
+            fresh_results = itunes.LibraryPlaylist.Search("love", 0)
+            if fresh_results and fresh_results.Count > 0:
+                fresh_track = fresh_results.Item(1)
+
+                # Try the workaround: use AddFile if available
+                if hasattr(fresh_track, 'Location') and fresh_track.Location:
+                    test_playlist.AddFile(fresh_track.Location)
+                    print(f"  ✓ Method 5 (Fresh search + AddFile) worked!")
+                else:
+                    print(f"  ✗ Method 5: Track has no location")
+        except Exception as e:
+            print(f"  ✗ Method 5 (Fresh search) failed: {e}")
 
         # Check if track was added
         print(f"\nPlaylist now has {test_playlist.Tracks.Count} tracks")
