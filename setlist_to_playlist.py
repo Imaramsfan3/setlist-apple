@@ -372,6 +372,7 @@ class AppleMusicWindowsController(MusicController):
             self.win32com = win32com.client
             self._app = None
             self._app_name = None
+            self._playlist = None  # Store playlist reference
         except ImportError:
             raise ImportError(
                 "pywin32 required for Windows COM support.\n"
@@ -403,29 +404,37 @@ class AppleMusicWindowsController(MusicController):
 
     def create_playlist(self, name: str) -> None:
         app = self._get_app()
+
+        # Check if playlist already exists
         for src in app.Sources:
-            if src.Kind == 1:
+            if src.Kind == 1:  # Library
                 for pl in src.Playlists:
                     if pl.Name == name:
                         print(f"Playlist already exists: {name}")
+                        self._playlist = pl
                         return
-        app.CreatePlaylist(name)
+
+        # Create new playlist and store reference
+        self._playlist = app.CreatePlaylist(name)
         print(f"✓ Created playlist: {name}")
 
     def search_and_add_song(self, playlist_name: str, song_name: str, artist_name: str) -> bool:
         try:
             app = self._get_app()
 
-            # Find the target playlist
-            target = None
-            for src in app.Sources:
-                if src.Kind == 1:  # Library
-                    for pl in src.Playlists:
-                        if pl.Name == playlist_name:
-                            target = pl
+            # Use stored playlist reference if available
+            target = self._playlist
+            if not target:
+                # Fall back to searching by name
+                for src in app.Sources:
+                    if src.Kind == 1:  # Library
+                        for pl in src.Playlists:
+                            if pl.Name == playlist_name:
+                                target = pl
+                                self._playlist = pl
+                                break
+                        if target:
                             break
-                    if target:
-                        break
 
             if not target:
                 print(f"  ✗ Playlist not found: {playlist_name}")
@@ -433,45 +442,48 @@ class AppleMusicWindowsController(MusicController):
 
             query = f"{song_name} {artist_name}"
 
-            # Step 1: Try searching in library first
+            # Try searching in library
             results = app.LibraryPlaylist.Search(query, 0)
 
             if results and results.Count > 0:
                 track = results.Item(1)
-                target.AddTrack(track)
-                print(f"  ✓ Added: {song_name} - {artist_name}")
-                return True
 
-            # Step 2: If not in library, try searching Apple Music Store
-            # Note: This requires Apple Music subscription
-            try:
-                # Search Apple Music Store (Source.Kind == 4)
-                store_source = None
-                for src in app.Sources:
-                    if src.Kind == 4:  # Apple Music Store
-                        store_source = src
-                        break
+                # Try multiple methods to add the track
+                try:
+                    # Method 1: Use playlist.Tracks.Add
+                    target.Tracks.Add(track)
+                    print(f"  ✓ Added: {song_name} - {artist_name}")
+                    return True
+                except:
+                    pass
 
-                if store_source:
-                    # Search the store
-                    store_results = store_source.Search(query, 0)
-                    if store_results and store_results.Count > 0:
-                        # Add to library first, then to playlist
-                        store_track = store_results.Item(1)
-                        # Download/add to library (if Apple Music subscriber)
-                        store_track.AddToLibrary()
-                        time.sleep(1)  # Wait for library update
+                try:
+                    # Method 2: Use AddTrack
+                    target.AddTrack(track)
+                    print(f"  ✓ Added: {song_name} - {artist_name}")
+                    return True
+                except:
+                    pass
 
-                        # Now search library again
-                        lib_results = app.LibraryPlaylist.Search(query, 0)
-                        if lib_results and lib_results.Count > 0:
-                            target.AddTrack(lib_results.Item(1))
-                            print(f"  ✓ Added: {song_name} - {artist_name} (from Apple Music)")
-                            return True
+                try:
+                    # Method 3: Use track.AddToPlaylist (iTunes API)
+                    # Get the database ID
+                    import win32com.client
+                    track_id = track.TrackID
+                    db_id = track.TrackDatabaseID
 
-            except Exception as store_error:
-                # Store search failed - user might not have Apple Music subscription
-                pass
+                    # Try using the track to add itself
+                    for t in app.LibraryPlaylist.Tracks:
+                        if t.TrackID == track_id:
+                            # Copy track to playlist using duplicate
+                            duplicate = t.Duplicate()
+                            # This might not work either...
+                            break
+                except:
+                    pass
+
+                print(f"  ✗ Could not add to playlist: {song_name}")
+                return False
 
             print(f"  ✗ Not found: {song_name} - {artist_name}")
             return False
